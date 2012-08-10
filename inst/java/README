@@ -1,0 +1,192 @@
+****************
+* Installation *
+****************
+
+Requirements: JRE 1.6 or greater
+Installation: Put MSGFDB.jar in any folder.
+
+***********
+* MS-GFDB *
+***********
+
+Usage: java -Xmx2000M -jar MSGFDB.jar
+	-s SpectrumFile (*.mzXML, *.mzML, *.mgf, *.ms2, *.pkl or *_dta.txt)
+	-d DatabaseFile (*.fasta or .fa)
+	-t ParentMassTolerance (e.g. 2.5Da, 30ppm, or 0.5Da,2.5Da)
+	   Use comma to set asymmetric values. E.g. "-t 0.5Da,2.5Da" will set 0.5Da to the left (expMass<theoMass) and 2.5Da to the right (expMass>theoMass).
+	[-o outputFileName] (Default: stdout)
+	[-thread NumOfThreads] (Number of concurrent threads to be executed, Default: Number of available cores)
+	[-tda 0/1] (0: don't search decoy database (default), 1: search decoy database to compute FDR)
+	[-m FragmentationMethodID] (0: as written in the spectrum or CID if no info (Default), 1: CID, 2: ETD, 3: HCD, 4: Merge spectra from the same precursor)
+	[-inst InstrumentID] (0: Low-res LCQ/LTQ (Default for CID and ETD), 1: TOF , 2: High-res LTQ (Default for HCD))
+	[-e EnzymeID] (0: No enzyme, 1: Trypsin (Default), 2: Chymotrypsin, 3: Lys-C, 4: Lys-N, 5: Glu-C, 6: Arg-C, 7: Asp-N, 8: aLP)
+	[-c13 0/1/2] (Number of allowed C13, Default: 1)
+	[-nnet 0/1/2] (Number of allowed non-enzymatic termini, Default: 1)
+	[-mod ModificationFileName] (Modification file, Default: standard amino acids with fixed C+57)
+	[-minLength MinPepLength] (Minimum peptide length to consider, Default: 6)
+	[-maxLength MaxPepLength] (Maximum peptide length to consider, Default: 40)
+	[-minCharge MinPrecursorCharge] (Minimum precursor charge to consider if not specified in the spectrum file, Default: 2)
+	[-maxCharge MaxPrecursorCharge] (Maximum precursor charge to consider if not specified in the spectrum file, Default: 3)
+	[-n NumMatchesPerSpec] (Number of matches per spectrum to be reported, Default: 1)
+	[-uniformAAProb 0/1] (0: use amino acid probabilities computed from the input database (default), 1: use probability 0.05 for all amino acids)
+
+Parameters:
+
+    * -s SpectrumFile (*.mzXML, *.mzML, *.mgf, *.ms2, *.pkl or *_dta.txt) - Required
+          o Spectrum file name. Currently, MS-GFDB supports the following file formats: mzXML, mzML, mgf, ms2, pkl and _dta.txt.
+
+    * -d DatabaseFile (*.fasta or *.fa) - Required
+          o Path to the protein database file. If the database file does not have auxiliary index files (*.canno, *.cnlcp, *.csarr, and *.cseq), MS-GFDB will create them.
+          o When "-tda 1" option is used, the database must contain only target protein sequences.
+
+	If multiple MS-GFDB processes access the same database file, it is strongly recommended to index the database prior to the database search by running BuildSA (see below).
+
+    * -t ParentMassTolerance - Required
+          o Parent mass tolerance in Da. or ppm. There must be no space between the number and the unit. E.g. 2.5Da, 30ppm
+          o To set asymmetric tolerances, use comma to separate left (experimental mass < theoretical mass) or right (experimental mass > theoretical mass) tolerances. E.g. 0.5Da,2.5Da
+
+    * -o OutputFile (Default: stdout)
+          o Filename where the output will be written.
+          o The output will be printed to standard out by default.
+
+    * -thread NumOfThreads (Number of concurrent threads to be executed, Default: Number of available cores)
+          o Number of concurrent threads to be executed together.
+          o Default value is the number of available logical cores (e.g. 8 for quad-core processor with hyper-threading support).
+
+    * -tda 0/1 (0: don't search decoy database (default), 1: search decoy database to compute FDR)
+          o Indicates whether to search the decoy database or not.
+          o If 0, the decoy database is not searched and FDRs are theoretically derived from P-values (EFDR).
+          o If 1, FDRs are computed based on the target-decoy approach (i.e. reversed database is appended to the target database and MS-GFDB searches the combined database)
+                + FDR(t) = #(DecoyPSMs with score equal or above t) / #(TargetPSMs with score equal or above t).
+                + PSM: Peptide-Spectrum Match
+                + -log(SpecProb) is used as the score to compute FDR.
+
+	If -tda 1 is specified, MS-GFDB automatically creates a combined target/reversed database file (DBFileName.revConcat.fasta). Thus, when specifying "-d" parameter, DatabaseFile must contain only target proteins.
+
+    * -m FragmentationMethodID (0: as written in the spectrum or CID if no info (Default), 1: CID, 2: ETD, 3: HCD, 4: Merge spectra from the same precursor)
+          o Fragmentation method identifier (used to determine the scoring model).
+          o If the identifier is 0 and fragmentation method is written in the spectrum file (e.g. activationMethod field in mzXML files), MS-GFDB will recognize the fragmentation method and use a relevant scoring model.
+          o If the identifier is 0 and there is no fragmentation method information in the spectrum (e.g. mgf files), CID model will be used by default.
+          o If the identifier is non-zero and the spectrum has fragmentation method information, only the spectra that match with the identifier will be processed.
+          o If the identifier is non-zero and the spectrum has no fragmentation method information, MS-GFDB will process all spectra assuming the specified fragmentation method.
+          o If the identifier is 4, MS/MS spectra from the same precursor ion (e.g. CID/ETD pairs, CID/HCD/ETD triplets) will be merged and the "merged" spectrum will be used for searching instead of individual spectra. See Kim et al., MCP 2010 for details.
+
+    * -inst InstrumentID (0: Low-res LCQ/LTQ (Default for CID and ETD), 1: TOF , 2: High-res LTQ (Default for HCD))
+          o Identifier of the instrument to generate MS/MS spectra (used to determine the scoring model).
+          o For "hybrid" spectra with high-precision MS1 and low-precision MS2, use 0.
+          o For usual low-precision instruments (e.g. Thermo LTQ), use 0.
+          o For TOF instruments, use 1.
+          o If MS/MS fragment ion peaks are of high-precision (e.g. tolerance = 10ppm), use 2.
+
+    * -e EnzymeID (Default: 1)
+          o Enzyme identifier. Trypsin (1) will be used by default.
+          o 0: No enzyme, 1: Trypsin (default), 2: Chymotrypsin, 3: Lys-C, 4: Lys-N, 5: Glu-C, 6: Arg-C, 7: Asp-N, 8: alphaLP
+
+    * -c13 0/1/2 (Number of allowed isotope errors, Default: 1)
+          o Instruments often choose 2nd or 3rd isotope peak instead of mono-isotope peak from MS1 spectrum.
+          o If this value is non-zero, expPeptideMass-1.00335 (i.e. mass(13C)-mass(12C)) and expPeptideMass-2.00671 (i.e. 2*(mass(C13)-mass(C12)) (only if -c13 2) will be considered along with expPeptideMass.
+          o If accurate precursor ion mass is available (e.g. LTQ-Orbitrap), it is better to set a narrow parent mass tolerance and non-zero -c13 value (e.g. -t 30ppm -c13 1) than to set a wide tolerance (e.g. -t 0.5Da,2.5Da).
+          o If the parent mass tolerance is equal to or larger than 0.5Da or 500ppm, this parameter will be ignored.
+
+    * -nnet 0/1/2 (Number of allowed non-enzymatic termini, Default: 1)
+          o This parameter is used to determine the enzyme cleavage rule.
+          o Specifies the maximum number of peptide termini that are not cleaved by the enzyme.
+          o For example, for trypsin, K.ACDEFGHR.C, G.ACDEFGHR.C, K.ACDEFGHI.C and G.ACDEFGHR.C have 0, 1, 1 and 2 non-enzymatic termini, accordingly.
+          o By default, -nnet 1 will be used. Using -nnet 0 (or 2) will make the search significantly faster (slower).
+
+    * -mod ModificationFile (Default: standard amino acids with fixed C+57)]
+          o Modification file name. ModificationFile contains the modifications to be considered in the search.
+          o If -mod option is not specified, standard amino acids with fixed Carboamidomethylation C will be used.
+          o See the attached modification file (Mods.txt).
+
+    * -minLength MinPepLength (Default: 6)
+          o Minimum length of the peptide to be considered.
+
+    * -maxLength MaxPepLength (Default: 40)
+          o Maximum length of the peptide to be considered.
+
+    * -minCharge MinPrecursorCharge (Default: 2)
+          o Minimum precursor charge to consider. This parameter is used only for spectra with no charge.
+
+    * -maxCharge MinPrecursorCharge (Default: 3)
+          o Maximum precursor charge to consider. This parameter is used only for spectra with no charge.
+
+    * -n NumMatchesPerSpec (Default: 1)
+          o Number of peptide matches per spectrum to report.
+          o Expected false discovery rates (EFDRs) will be reported only when this value is 1.
+
+    * -uniformAAProb 0/1 (Default: 0)
+          o If 0, compute amino acid frequencies from the input database and use them as amino acid probabilities.
+          o If 1, use uniform amino acid probability (preferable when the database size is small).
+
+******************
+* MS-GFDB output *
+******************
+
+MS-GFDB outputs a tab-delimited file with the following columns: #SpecFile, Scan#, FragMethod, Precursor, PMError, Charge, Peptide, Protein, DeNovoScore, MSGFScore, SpecProb, P-value, EFDR.
+
+    * SpecFile: spectrum file name
+    * SpecIndex: spectrum index (1-based) in the file. The first spectrum has index 1, the second has index 2, and so on. For mzXML files this value is same as the scan number.
+    * Scan#: scan number of the spectrum. If the scan number is not available, the value will be -1.
+    * FragMethod: fragmentation method used to generate the spectrum (e.g. CID, ETD, etc.). When spectra from the same precursor are merged, fragmentation methods of merged spectra will be shown as a form "FragMethod1/FragMethod2/..." (e.g. CID/ETD, CID/HCD/ETD).
+    * Precursor: precursor mass in m/z or ppm
+    * Charge: precursor ion charge
+    * Peptide: peptide sequence with neighboring amino acids
+    * Protein: protein name
+    * DeNovoScore: the score of the optimal scoring peptide (not necessary in the database)
+    * MSGFScore: MS-GF raw score of the peptide-spectrum match (MSGFScore <= DeNovoScore)
+    * SpecProb: spectral probability (spectrum level p-value) of the peptide-spectrum match
+    * P-value: database level p-value (probability that a random PSM have an equal or better score against a random database of the same size)
+    * EFDR or FDR: false discovery rate
+          o If "-tda 1" is specified, FDRs are estimated using the target-decoy approach using the spectral probability (SpecProb) as the score (the lower, the better).
+          o Otherwise, FDRs are estimated using P-values without searching the decoy database (EFDR). See Gupta et al., JASMS 2011 for details.
+          o MS-GFDB reports EFDR only when it is configured to report 1 peptide match per spectrum (i.e. -n 1).
+          o EFDR accurately estimates FDR when the parent mass tolerance is equal or larger than 0.5.
+          o EFDR conservatively estimates FDR when the parent mass tolerance is small.
+                + E.g. When parent mass tolerance is 30ppm, at EFDR 1% threshold, one identifies approximately 7% less peptide-spectrum matches (PSMs) compared to the case when the target-decoy approach is used to estimate the FDR.
+    * PepFDR
+          o Peptide-level FDR estimated using the target-decoy approach.
+          o Reported only if "-tda 1" is specified.
+          o If multiple spectra are matched to the same peptide, only the best scoring PSM (lowest SpecProb) is retained. After that, PepFDR is calculated as #DecoyPSMs>s / #TargetPSMs>s among the retained PSMs. This approximates the FDR of the set of unique peptides. In the MS-GFDB output, the same PepFDR value is given to all PSMs sharing the peptide. So, even a low-quality PSM may get a low PepFDR value (if it has a high-quality "sibling" PSM sharing the peptide). Note that this should not be used to count the number of identified PSMs.
+
+          o If multiple spectra are matched to the same peptide, only the best-scoring match is retained and used to compute FDR.
+
+**************************
+* MS-GFDB output example *
+**************************
+
+#SpecFile	SpecIndex	Scan#	FragMethod	Precursor	PMError(ppm)	Charge	Peptide	Protein	DeNovoScore	MSGFScore	SpecProb	P-value	FDR	PepFDR
+090121_NM_Trypsin_20.mzXML	2838	2838	CID	964.7707	1.5199227	3	K.TIQNSSVSPTSSSSSSSSTGETQTQSSSR.L	IPI:IPI00002349.2|SWISS-PROT:Q7Z417|TREMBL:A1L3A7|ENSEMBL:ENSP00000225388|REFSEQ:NP_065823|H-INV:HIT000001036|VEGA:OTTHUMP00000181037 Tax_Id=9606 Gene_Symbol=NUFIP2 Nuclear fragile X mental retardation-interacting protein 2	190	181	9.380133E-30	2.9333857E-22	0.0	0.0
+090121_NM_Trypsin_20.mzXML	3671	3671	ETD	1113.4758	0.6583758	2	R.VGPADDGPAPSGEEEGEGGGEAGGK.E	IPI:IPI00016725.2|SWISS-PROT:Q9UKN8|TREMBL:B3KNH2;Q05CN7|ENSEMBL:ENSP00000361219|REFSEQ:NP_036336|H-INV:HIT000071196|VEGA:OTTHUMP00000022434 Tax_Id=9606 Gene_Symbol=GTF3C4 General transcription factor 3C polypeptide 4	162	158	1.9912463E-28	6.0892146E-21	0.0	0.0
+090121_NM_Trypsin_20.mzXML	3031	3031	ETD	651.64874	1.7510794	3	K.GAAAAAAASGAAGGGGGGAGAGAPGGGR.L	IPI:IPI00644073.1|VEGA:OTTHUMP00000038687 Tax_Id=9606 Gene_Symbol=INTS3 18 kDa protein	214	202	6.7318633E-28	2.093763E-20	0.0	0.0
+090121_NM_Trypsin_20.mzXML	13333	13333	CID/ETD	634.3347	1.445585	2	K.MVVESAYEVIK.L	IPI:IPI00219217.3|SWISS-PROT:P07195|TREMBL:Q5U077|ENSEMBL:ENSP00000229319;ENSP00000379386|REFSEQ:NP_001167568;NP_002291|H-INV:HIT000037014|VEGA:OTTHUMP00000165228;OTTHUMP00000165229;OTTHUMP00000166897 Tax_Id=9606 Gene_Symbol=LDHB L-lactate dehydrogenase B chain	242	242	3.2079423E-15	8.888763E-8	0.0	0.0
+
+***********
+* BuildSA *
+***********
+
+Index a protein database for fast searching. 
+
+Usage: java -cp MSGFDB.jar msdbsearch.BuildSA 
+	-d DatabaseFile (*.fasta or *.fa)
+	[-tda 0/1/2] (0: target only, 1: target-decoy database only, 2: both)
+
+Parameters:
+
+    * -d DbPath
+          o Name of a protein database (*.fasta or *.fa) 
+          o Database file must ends with ".fasta" or ".fa".
+    * -tda 0/1/2
+          o If 0, only "DatabaseFile" will be indexed.
+          o If 1, a new database file (*.revConcat.fasta) will be generated by appending reversed proteins. This forward-reverse database will be indexed.
+          o If 2, both the original database and the forward-reverse database file will be indexed.
+
+BuildSA creates a suffix array of the protein database. For a input database file DBFileName.fasta, BuildSA will generate 4 auxiliary files (DbFileName.canno, DBFileName.cnlcp, DBFileName.csarr, DBFileName.cseq). It needs to be executed only once per each database file.
+
+**************
+* References *
+**************
+
+Sangtae Kim, Nikolai Mischerikow, Nuno Bandeira, J. Daniel Navarro, Louis Wich, Shabaz Mohammed, Albert J. R. Heck and Pavel A. Pevzner, The Generating Function of CID, ETD and CID/ETD Pairs of Tandem Mass Spectra: Applications to Database Search, Molecular & Cellular Proteomics, 9, 2840-2852, 2010.
+
+Sangtae Kim, Nitin Gupta and Pavel Pevzner, Spectral Probabilities and Generating Functions of Tandem Mass Spectra: A Strike against Decoy Databases, Journal of Proteome Research, 7(8), 3354-3363, 2008.

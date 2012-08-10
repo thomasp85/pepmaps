@@ -1,0 +1,22 @@
+v6953 (12/08/2011)
+- A bug allowing peptides with multiple modifications at the same residue has been fixed.
+- A bug happening during the database indexing has been fixed. This will change database P-values (not spectral probabilities) slightly and also improve the search speed a little. It is recommended to index databases again (delete *.c* files associated with the database)
+- For N-term specific modifications, the mass of modification lies before an amino acid residue (e.g. -17Q instead of Q-17 for pyro-glu Q).
+- MS-GFDB now does not print out masses of fixed modifications in all cases. Previously, it printed out modification masses of terminal-specific fixed modifications.
+
+v6964 (12/11/2011)
+- Previously, MS-GFDB had a bug in computing peptide masses when C-term specific modifications were specified. This bug has been fixed. 
+
+v7064 (12/22/2011)
+- Now users can add new fragmentation methods, enzymes and protocols.
+- See params/activationMethods.txt, params/enzymes.txt, params/protocols.txt.
+- MS-GFDB UI automatically reflects user-defined fragmentation methods, enzymes, and protocols. 
+- MSGFDB.jar now includes ui.ScoringParamGen for generating (user-defined) scoring parameter files.
+- See https://bix-lab.ucsd.edu/display/CCMStools/ScoringParamGen for documentation.
+
+v7098 (12/29/2011)
+- Added a hidden parameter "-showDecoy" to show decoy PSMs along with target PSMs.
+- A bug in the MS-GF module (crashing while processing modified PSMs) has been fixed.
+
+v7102 (01/06/2012)
+- A minor bug introduced in v7098 (reporting decoy PSMs along with target PSMs) has been fixed. 

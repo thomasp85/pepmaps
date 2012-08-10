@@ -1,0 +1,18 @@
+### Ideas and extensions
+
+- Implementation of peptide analysis functions
+- integration of rdisop package for compound ID
+- Function to add, edit and delete parameter sets
+- investigate calibration results
+- add subset possibility to functions
+- Stacked area plot for time series data analysis
+- function to extract all info on a peptide (like getFeature)
+- Subsetting in sampleInfo() and sampleNames()
+- implement filehash to overcome memory limitations...
+- Make class for RawID and let it define extraction... (and make appropriate changes to plotEIC, getPeplist and getRawID)
+- Solve memory problem in filterCor (make the function only calculate it for matched features)
+- Calculate correct limit for DmodX
+
+- Ensure consistent argument naming scheme
+- Allow for unconstrained subgrouping in ggHeat and apply to rows as well
+- test out caret implementation...
