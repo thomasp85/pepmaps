@@ -262,7 +262,7 @@ MSGFplus <- function(file, database, tolerance, tda=TRUE, instrument, protease, 
 	if(Sys.info()["sysname"] == 'Windows'){
 		file <- paste('\"', file, '\"', sep='')
 	} else {
-		file <- sub(' ', '\\ ', file, fixed=T)
+		file <- gsub(' ', '\\ ', file, fixed=T)
 	}
 	call <- paste('-s ', file, sep='')
 	
@@ -274,7 +274,7 @@ MSGFplus <- function(file, database, tolerance, tda=TRUE, instrument, protease, 
 	if(Sys.info()["sysname"] == 'Windows'){
 		database <- paste('\"', database, '\"', sep='')
 	} else {
-		database <- sub(' ', '\\ ', database, fixed=T)
+		database <- gsub(' ', '\\ ', database, fixed=T)
 	}
 	call <- paste(call, ' -d ', database, sep='')
 	
