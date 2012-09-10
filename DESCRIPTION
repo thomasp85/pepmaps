@@ -1,7 +1,7 @@
 Package: pepmaps
 Type: Package
 Title: Create peptide maps by merging xcms (and CAMERA) with MassAI
-Version: 1.5-2
+Version: 1.5-3
 Date: 2011-10-04
 Author: Thomas Dybdal Pedersen
 Maintainer: Thomas Dybdal Pedersen <thomasp85@gmail.com>

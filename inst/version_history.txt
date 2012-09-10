@@ -23,6 +23,7 @@ Version history
 - Added plotCoverage to plot the coverage of of the proteins in the database, and coverageReport to create plots for all samples. coverageReport is now included in pepReport
 - ggHeat now supports indefinite subgrouping in both columns and rows.
 - plotHeat now has a sample.name argument to replace the sample names with a value from the design matrix
+- Fixed a bug where non-deleted caches from MSGFplus would prevent subsequent MSGFplus runs...
 
 ### 1.4
 - Added plotHeat functionality to produce transcriptome-like heatmaps
