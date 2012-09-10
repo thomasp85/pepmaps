@@ -342,6 +342,8 @@ MSGFplus <- function(file, database, tolerance, tda=TRUE, instrument, protease, 
 	
 	call <- paste('java -Xmx512M -jar ', R.home(component='library/pepmaps/java/MSGFDB.jar'), ' ', call, sep='')
 	
+	unlink(paste(tmp, '*', sep=''))
+	
 	system(call, ignore.stderr=TRUE, ignore.stdout=!verbose)
 	
 	ans <- read.table(tmp, sep='\t')
