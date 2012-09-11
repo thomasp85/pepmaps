@@ -1,5 +1,4 @@
 mzXML=true
-zlib=true
-32=true
+zlib=false
 filter=peakPicking true 1-
 filter=MS2Deisotope

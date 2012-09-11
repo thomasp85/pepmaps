@@ -69,13 +69,13 @@ setMethod(
 					mz <- mean(x$Precursor)
 					charge <- mean(x$Charge)
 					mass <- pepMass(seq, mono=TRUE)
-					m.err <- mean(x$'PMError(Da)')
+					m.err <- mean(x$'PrecursorError(Da)')
 					prot <- x$Protein[1]
-					fdr <- if(is.null(x$FDR[1])) min(x$EFDR) else min(x$FDR)
+					fdr <- min(x$QValue)
 					data.frame(name, seq, rt, mz, charge, mass, m.err, prot, fdr)
 				}
 				peplist <- ddply(raw, .(Peptide.ID), cPep)
-				names(peplist) <- c('Peptide.ID', 'Peptide.name', 'Sequence', 'Retention.time', 'mz', 'Charge', 'Mass', 'Mass.error', 'Protein', if(is.null(raw$FDR[1])) 'EFDR' else 'FDR')
+				names(peplist) <- c('Peptide.ID', 'Peptide.name', 'Sequence', 'Retention.time', 'mz', 'Charge', 'Mass', 'Mass.error', 'Protein', 'FDR')
 				.Object@peplist <- peplist
 			} else {}
             .Object@peplist <- data.frame(.Object@peplist, Qval(as.character(.Object@peplist$Sequence)), Length=nchar(as.character(.Object@peplist$Sequence)))
@@ -283,7 +283,7 @@ MSGFplus <- function(file, database, tolerance, tda=TRUE, instrument, protease, 
 	} else {}
 	call <- paste(call, ' -t ', tolerance, sep='')
 	
-	tmp <- R.home(component='library/pepmaps/msgfdb.cache.txt')
+	tmp <- R.home(component='library/pepmaps/msgfplus.cache.mzid')
 	call <- paste(call, ' -o ', tmp, sep='')
 	
 	if(tda){
@@ -340,14 +340,20 @@ MSGFplus <- function(file, database, tolerance, tda=TRUE, instrument, protease, 
 		call <- paste(call, ' -minCharge ', chargeRange[1], ' -maxCharge ', chargeRange[2], sep='')
 	} else {}
 	
-	call <- paste('java -Xmx512M -jar ', R.home(component='library/pepmaps/java/MSGFDB.jar'), ' ', call, sep='')
+	call <- paste('java -Xmx1500M -jar ', R.home(component='library/pepmaps/java/MSGFplus.jar'), ' ', call, sep='')
 	
 	unlink(paste(tmp, '*', sep=''))
 	
 	system(call, ignore.stderr=TRUE, ignore.stdout=!verbose)
+	cat('Importing results...')
+	flush.console()
+	callConv <- paste('java -Xmx1500M -cp ', R.home(component='library/pepmaps/java/MSGFplus.jar'), ' edu.ucsd.msjava.ui.MzIDToTsv -i ', tmp, ' -o ', paste(tmp, '.tsv', sep=''), ' -unroll 1')
+	system(callConv)
 	
-	ans <- read.table(tmp, sep='\t')
-	names(ans) <- scan(tmp, nlines=1, what=character(), quiet=TRUE)
+	ans <- read.table(paste(tmp, '.tsv', sep=''), sep='\t')
+	names(ans) <- scan(paste(tmp, '.tsv', sep=''), nlines=1, what=character(), quiet=TRUE)
+	cat('DONE\n')
+	flush.console()
 	unlink(paste(tmp, '*', sep=''))
 	ans
 }
@@ -426,10 +432,10 @@ pepID <- function(type, path=file.choose(), sep='\t', dec='.', directory, databa
 			data$rt <- NA
 			datafiles <- list.files(directory, pattern='*.mzXML', ignore.case=TRUE, full.names=TRUE)
 			for(i in 1:length(datafiles)){
-				raw <- xcmsRaw(datafiles[i], includeMSn=TRUE)
+				raw <- mzR::header(mzR::openMSfile(datafiles[i]))
 				ind <- which(data$SpecFile == basename(datafiles)[i])
 				scan <- data$Scan[ind]
-				rt <- raw@scantime[raw@msnPrecursorScan[sapply(scan, function(x, a) which(a == x), x=raw@msnAcquisitionNum)]]
+				rt <- raw$retentionTime[match(scan, raw$acquisitionNum)]
 				data$rt[ind] <- rt
 			}
 			db <- read.AAStringSet(database)

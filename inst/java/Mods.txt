@@ -7,9 +7,8 @@ NumMods=2
 
 # To input a modification, use the following command:
 # Mass or CompositionStr, Residues, ModType, Position, Name (all the five fields are required).
-# CompositionStr (C[Num]H[Num]N[Num]O[Num]S[Num]P[Num])
-# 	- C (Carbon), H (Hydrogen), N (Nitrogen), O (Oxygen), S (Sulfer) and P (Phosphorus) are allowed.
-# 	- Atom can be omitted. The sequence of atoms must be followed. 
+# CompositionStr (C[Num]H[Num]N[Num]O[Num]S[Num]P[Num]Br[Num]Cl[Num]Fe[Num])
+# 	- C (Carbon), H (Hydrogen), N (Nitrogen), O (Oxygen), S (Sulfer), P (Phosphorus), Br (Bromine), Cl (Chlorine), Fe (Iron), and Se (Selenium) are allowed.
 # 	- Negative numbers are allowed.
 # 	- E.g. C2H2O1 (valid), H2C1O1 (invalid) 
 # Mass can be used instead of CompositionStr. It is important to specify accurate masses (integer masses are insufficient).
@@ -26,19 +25,21 @@ NumMods=2
 # 	- Case insensitive
 # 	- "-" can be omitted
 # 	- E.g. any, Any, Prot-n-Term, ProtNTerm => all valid
-# Name: name of the modification
-# 	- E.g. Oxidation
+# Name: name of the modification (Unimod PSI-MS name)
+# 	- For proper mzIdentML output, this name should be the same as the Unimod PSI-MS name
+# 	- E.g. Phospho, Acetyl
+# 	- Visit http://www.unimod.org to get PSI-MS names.
 
-C2H3N1O1,C,fix,any,Carbamidomethylation 	# Fixed Carbamidomethyl C
+C2H3N1O1,C,fix,any,Carbamidomethyl 		# Fixed Carbamidomethyl C
 
 # Variable Modifications (default: none)
 O1,M,opt,any,Oxidation				# Oxidation M
 #15.994915,M,opt,any,Oxidation			# Oxidation M (mass is used instead of CompositionStr)
-#H-1N-1O1,NQ,opt,any,Deamidation		# Negative numbers are allowed.
-#C2H3NO,*,opt,N-term,Carbamidomethylation	# Variable Carbamidomethyl N-term
-#H-2O-1,E,opt,N-term,Pyro-glu			# Pyro-glu from E
-#H-3N-1,Q,opt,N-term,Pyro-glu			# Pyro-glu from Q
-#C2H2O,*,opt,Prot-N-term,Acetylation		# Acetylation Protein N-term
-#C2H2O1,K,opt,any,Acetylation			# Acetylation K
-#CH2,K,opt,any,Methylation			# Methylation K
-#HO3P,STY,opt,any,Phosphorylation		# Phosphorylation STY
+#H-1N-1O1,NQ,opt,any,Deamidated			# Negative numbers are allowed.
+#C2H3NO,*,opt,N-term,Carbamidomethyl		# Variable Carbamidomethyl N-term
+#H-2O-1,E,opt,N-term,Glu->pyro-Glu			# Pyro-glu from E
+#H-3N-1,Q,opt,N-term,Gln->pyro-Glu			# Pyro-glu from Q
+C2H2O,*,opt,Prot-N-term,Acetyl			# Acetylation Protein N-term
+#C2H2O1,K,opt,any,Acetyl			# Acetylation K
+#CH2,K,opt,any,Methy				# Methylation K
+#HO3P,STY,opt,any,Phospho			# Phosphorylation STY
