@@ -91,15 +91,22 @@ createComplist <- function(mzXML, Sample.info, ID='MSGF+', IDdir, database='milk
 		
 		# Run xcms pipeline to create xcmsSet
         cat('Running xcms analysis...\n\n')
+		cat('Detecting peaks...\n')
         flush.console()
         xset <- do.call('xcmsSet', c(list(files=mzXML), par@parameters$findPeak))
         if(retcor){
+			cat('\nCorrecting shifts in retention time...\n\n')
+			flush.console()
             if(length(mix) != 0){
                 par@parameters$retcor$center <- mix[round(median(1:length(mix)))]
             } else {}
             xset <- do.call('retcor', c(list(object=xset), par@parameters$retcor))
         } else {}
+		cat('\nGrouping peaks between samples...\n\n')
+		flush.console()
         xset <- do.call('group', c(list(object=xset), par@parameters$group))
+		cat('\nDetecting signal in samples missing from peak groups...\n\n')
+		flush.console()
         xset <- fillPeaks(xset)
         if(annotate){
             cat('\nRunning annotation with CAMERA...\n\n')
@@ -118,7 +125,7 @@ createComplist <- function(mzXML, Sample.info, ID='MSGF+', IDdir, database='milk
         }
     }
     last <- proc.time()
-    cat('Done!\n\tProcess lasted ', (last-first)[3], ' sec. (', (last-first)[3]/60, ' min.\n)', sep='')
+    cat('Done!\n\tProcess lasted ', (last-first)[3], ' sec. (', (last-first)[3]/60, ' min.)\n', sep='')
     comp
 }
 ### pepReport
