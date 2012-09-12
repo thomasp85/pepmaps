@@ -393,7 +393,7 @@ findName <- function(x, name){
     ans
 }
 ## convert using msconvert
-convertData <- function(files, location, convertTo=c('mzXML')){
+convertData <- function(files, location, convertTo=c('mzXML', 'mgf')){
     if(missing(files)){
 		if(Sys.info()["sysname"] == 'Windows'){
 			readline('Choose the directory containing the .d data files: <Press Return>')

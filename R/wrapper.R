@@ -2,7 +2,7 @@
 
 ### createComplist
 ### Wrapper function to create xcmsSet and PepID and combine the information into a Complist object
-createComplist <- function(mzXML, Sample.info, ID='MSGF+', IDdir, database='milk_prot', cache=FALSE, par='standard', sep='\t', dec='.', annotate=FALSE, retcor=TRUE){
+createComplist <- function(mzXML, Sample.info, ID='MSGF+', IDdir, database='milk_prot', cache=FALSE, par='standard', sep='\t', dec='.', annotate=FALSE, retcor=TRUE, ...){
     first <- proc.time()
 	
 	# Input check
@@ -78,10 +78,10 @@ createComplist <- function(mzXML, Sample.info, ID='MSGF+', IDdir, database='milk
 	        massai <- list.files(IDdir, pattern='*.txt', full.names=TRUE, recursive=TRUE, ignore.case=TRUE)
 	    }
 	    type <- ID
-	    ID <- pepID(type, path=massai[1], sep=sep, dec=dec)
+	    ID <- pepID(type, path=massai[1], sep=sep, dec=dec, ...)
 		if(length(massai) > 1){
 			for(i in 2:length(massai)){
-				ID2 <- pepID(type, path=massai[i], sep=sep, dec=dec)
+				ID2 <- pepID(type, path=massai[i], sep=sep, dec=dec, ...)
 				ID <- mergePepID(ID, ID2)
 			}
 		} else {}

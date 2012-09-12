@@ -362,7 +362,7 @@ MSGFplus <- function(file, database, tolerance, tda=TRUE, instrument, protease, 
 		ans
 	}
 }
-collateMSGFplus <- function(directory, database, ...){
+collateMSGFplus <- function(directory, database, ..., useMGF=FALSE){
 	if(missing(directory)){
 		if(Sys.info()["sysname"] == 'Windows'){
 			cat('Choose directory of .mzXML files to analyse...\n')
@@ -372,7 +372,12 @@ collateMSGFplus <- function(directory, database, ...){
 			directory <- readline('Path to directory with .mzXML files to analyse:')
 		}
 	} else {}
-	files <- list.files(directory, pattern='*.mzXML', ignore.case=TRUE, full.names=TRUE)
+	if(useMGF){
+		files <- list.files(directory, pattern='*.MGF', ignore.case=TRUE, full.names=TRUE)
+	} else {
+		files <- list.files(directory, pattern='*.mzXML', ignore.case=TRUE, full.names=TRUE)
+	}
+	
 	if(length(files) == 0){
 		stop('Directory doesn\'t contain any data files')
 	} else {
