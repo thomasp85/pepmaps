@@ -350,12 +350,17 @@ MSGFplus <- function(file, database, tolerance, tda=TRUE, instrument, protease, 
 	callConv <- paste('java -Xmx1500M -cp ', R.home(component='library/pepmaps/java/MSGFplus.jar'), ' edu.ucsd.msjava.ui.MzIDToTsv -i ', tmp, ' -o ', paste(tmp, '.tsv', sep=''), ' -unroll 1')
 	system(callConv)
 	
-	ans <- read.table(paste(tmp, '.tsv', sep=''), sep='\t')
-	names(ans) <- scan(paste(tmp, '.tsv', sep=''), nlines=1, what=character(), quiet=TRUE)
-	cat('DONE\n')
-	flush.console()
-	unlink(paste(tmp, '*', sep=''))
-	ans
+	if(length(scan(paste(tmp, '.tsv', sep=''), skip=1, nlines=1, what='character')) == 0){
+		warning(paste('No peptides detected in ', basename(file), sep=''))
+		unlink(paste(tmp, '*', sep=''))
+	} else {
+		ans <- read.table(paste(tmp, '.tsv', sep=''), sep='\t')
+		names(ans) <- scan(paste(tmp, '.tsv', sep=''), nlines=1, what=character(), quiet=TRUE)
+		cat('DONE\n')
+		flush.console()
+		unlink(paste(tmp, '*', sep=''))
+		ans
+	}
 }
 collateMSGFplus <- function(directory, database, ...){
 	if(missing(directory)){
