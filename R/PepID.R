@@ -408,7 +408,7 @@ collateMSGFplus <- function(directory, database, useMGF=FALSE, ...){
 }
 ### Constructor for PepID objects
 ### Ask for location of MassAI/Crosswork results and creates the PepID object accordingly
-pepID <- function(type, path=file.choose(), sep='\t', dec='.', directory, database, useMFG=FALSE, ...){
+pepID <- function(type, path=file.choose(), sep='\t', dec='.', directory, database, useMGF=FALSE, ...){
     if(missing(type)){
         new(Class='PepID', type=character(), raw=data.frame())
     } else {
@@ -438,7 +438,7 @@ pepID <- function(type, path=file.choose(), sep='\t', dec='.', directory, databa
 			} else if(basename(database) == database){
 				database <- paste(R.home(component='library/pepmaps/extdata/'), database, '.fasta', sep='')
 			} else {}
-			data <- collateMSGFplus(directory=directory, database=database, useMFG=useMFG, ...)
+			data <- collateMSGFplus(directory=directory, database=database, useMGF=useMGF, ...)
 			data$rt <- NA
 			datafiles <- list.files(directory, pattern='*.mzXML', ignore.case=TRUE, full.names=TRUE)
 			for(i in 1:length(datafiles)){

@@ -2,7 +2,7 @@
 
 ### createComplist
 ### Wrapper function to create xcmsSet and PepID and combine the information into a Complist object
-createComplist <- function(mzXML, Sample.info, ID='MSGF+', IDdir, database='milk_prot', cache=FALSE, par='standard', sep='\t', dec='.', annotate=FALSE, retcor=TRUE, useMFG=FALSE){
+createComplist <- function(mzXML, Sample.info, ID='MSGF+', IDdir, database='milk_prot', cache=FALSE, par='standard', sep='\t', dec='.', annotate=FALSE, retcor=TRUE, useMGF=FALSE){
     first <- proc.time()
 	
 	# Input check
@@ -59,7 +59,7 @@ createComplist <- function(mzXML, Sample.info, ID='MSGF+', IDdir, database='milk
 			} else {}
 		} else {
 			type <- ID
-			para <- c(type=type, directory=dirname(mzXML[1]), database=database, useMFG=useMFG, par@parameters$MSGFplus)
+			para <- c(type=type, directory=dirname(mzXML[1]), database=database, useMGF=useMGF, par@parameters$MSGFplus)
 			ID <- do.call('pepID', para)
 			save(ID, file=R.home(component='library/pepmaps/msgfdb_res.cache.RData'))
 		}
