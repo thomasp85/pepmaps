@@ -393,7 +393,7 @@ findName <- function(x, name){
     ans
 }
 ## convert using msconvert
-convertData <- function(files, location, convertTo=c('mzXML', 'mgf')){
+convertData <- function(files, location, convertTo=c('mzXML')){
     if(missing(files)){
 		if(Sys.info()["sysname"] == 'Windows'){
 			readline('Choose the directory containing the .d data files: <Press Return>')
@@ -411,7 +411,13 @@ convertData <- function(files, location, convertTo=c('mzXML', 'mgf')){
 			location <- readline('Path to directory where the converted files should be put:')
 		}
     } else {}
-    if('mzXML' %in% convertTo){
+	for(i in 1:length(files)){
+		syscall <- paste('msconvert \"', files[i], '\" -o \"', location, '\" -c \"', R.home(component='library/pepmaps/extdata/mzXML.txt'), '\"', sep='')
+		system(syscall)
+		flush.console()
+	}
+	files <- sub('.d$', '.mzML', files)
+	if('mzXML' %in% convertTo){
         for(i in 1:length(files)){
             syscall <- paste('msconvert \"', files[i], '\" -o \"', location, '\" -c \"', R.home(component='library/pepmaps/extdata/mzXML.txt'), '\"', sep='')
             system(syscall)

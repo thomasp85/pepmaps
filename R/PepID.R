@@ -362,7 +362,7 @@ MSGFplus <- function(file, database, tolerance, tda=TRUE, instrument, protease, 
 		ans
 	}
 }
-collateMSGFplus <- function(directory, database, useMGF=FALSE, ...){
+collateMSGFplus <- function(directory, database, useML=FALSE, ...){
 	if(missing(directory)){
 		if(Sys.info()["sysname"] == 'Windows'){
 			cat('Choose directory of .mzXML files to analyse...\n')
@@ -372,8 +372,8 @@ collateMSGFplus <- function(directory, database, useMGF=FALSE, ...){
 			directory <- readline('Path to directory with .mzXML files to analyse:')
 		}
 	} else {}
-	if(useMGF){
-		files <- list.files(directory, pattern='*.MGF', ignore.case=TRUE, full.names=TRUE)
+	if(useML){
+		files <- list.files(directory, pattern='*.mzML', ignore.case=TRUE, full.names=TRUE)
 	} else {
 		files <- list.files(directory, pattern='*.mzXML', ignore.case=TRUE, full.names=TRUE)
 	}
@@ -404,11 +404,14 @@ collateMSGFplus <- function(directory, database, useMGF=FALSE, ...){
 	identifier <- data.frame(Peptide=identifier, Peptide.ID=1:length(identifier))
 	res <- merge(res, identifier, all.x=TRUE, sort=FALSE)
 	names(res) <- sub('#', '', names(res))
+	if(useML){
+		res$SpecFile <- sub('.mzML$', '.mzXML', res$SpecFile)
+	}
 	res
 }
 ### Constructor for PepID objects
 ### Ask for location of MassAI/Crosswork results and creates the PepID object accordingly
-pepID <- function(type, path=file.choose(), sep='\t', dec='.', directory, database, useMGF=FALSE, ...){
+pepID <- function(type, path=file.choose(), sep='\t', dec='.', directory, database, useML=FALSE, ...){
     if(missing(type)){
         new(Class='PepID', type=character(), raw=data.frame())
     } else {
@@ -438,7 +441,7 @@ pepID <- function(type, path=file.choose(), sep='\t', dec='.', directory, databa
 			} else if(basename(database) == database){
 				database <- paste(R.home(component='library/pepmaps/extdata/'), database, '.fasta', sep='')
 			} else {}
-			data <- collateMSGFplus(directory=directory, database=database, useMGF=useMGF, ...)
+			data <- collateMSGFplus(directory=directory, database=database, useML=useML, ...)
 			data$rt <- NA
 			datafiles <- list.files(directory, pattern='*.mzXML', ignore.case=TRUE, full.names=TRUE)
 			for(i in 1:length(datafiles)){
