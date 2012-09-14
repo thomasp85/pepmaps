@@ -25,7 +25,7 @@ Version history
 - plotHeat now has a sample.name argument to replace the sample names with a value from the design matrix
 - Fixed a bug where non-deleted caches from MSGFplus would prevent subsequent MSGFplus runs...
 - Updated the ID step to use MS-GF+ instead of MS-GFDB
-- Packed msconvert with packages and removed zlib compresion for faster data access
+- Removed zlib compresion for faster data access
 
 ### 1.4
 - Added plotHeat functionality to produce transcriptome-like heatmaps
