@@ -412,11 +412,11 @@ convertData <- function(files, location, convertTo=c('mzXML')){
 		}
     } else {}
 	for(i in 1:length(files)){
-		syscall <- paste('msconvert \"', files[i], '\" -o \"', location, '\" -c \"', R.home(component='library/pepmaps/extdata/mzXML.txt'), '\"', sep='')
+		syscall <- paste('msconvert \"', files[i], '\" -o \"', location, '\" -c \"', R.home(component='library/pepmaps/extdata/mzML.txt'), '\"', sep='')
 		system(syscall)
 		flush.console()
 	}
-	files <- file.path(location, basename(sub('.d$', '.mzML', files))
+	files <- file.path(location, basename(sub('.d$', '.mzML', files)))
 	if('mzXML' %in% convertTo){
         for(i in 1:length(files)){
             syscall <- paste('msconvert \"', files[i], '\" -o \"', location, '\" -c \"', R.home(component='library/pepmaps/extdata/mzXML.txt'), '\"', sep='')
