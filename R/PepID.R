@@ -340,21 +340,21 @@ MSGFplus <- function(file, database, tolerance, tda=TRUE, instrument, protease, 
 		call <- paste(call, ' -minCharge ', chargeRange[1], ' -maxCharge ', chargeRange[2], sep='')
 	} else {}
 	
-	call <- paste('java -Xmx1500M -jar ', R.home(component='library/pepmaps/java/MSGFplus.jar'), ' ', call, sep='')
+	call <- paste('java -Xmx10000M -jar ', R.home(component='library/pepmaps/java/MSGFplus.jar'), ' ', call, sep='')
 	
 	unlink(paste(tmp, '*', sep=''))
 	
 	system(call, ignore.stderr=TRUE, ignore.stdout=!verbose)
 	cat('Importing results...')
 	flush.console()
-	callConv <- paste('java -Xmx1500M -cp ', R.home(component='library/pepmaps/java/MSGFplus.jar'), ' edu.ucsd.msjava.ui.MzIDToTsv -i ', tmp, ' -o ', paste(tmp, '.tsv', sep=''), ' -unroll 1')
+	callConv <- paste('java -Xmx10000M -cp ', R.home(component='library/pepmaps/java/MSGFplus.jar'), ' edu.ucsd.msjava.ui.MzIDToTsv -i ', tmp, ' -o ', paste(tmp, '.tsv', sep=''), ' -unroll 1')
 	system(callConv)
 	
 	if(length(scan(paste(tmp, '.tsv', sep=''), skip=1, nlines=1, what='character', quiet=T)) == 0){
 		warning(paste('No peptides detected in ', basename(file), sep=''))
 		unlink(paste(tmp, '*', sep=''))
 	} else {
-		ans <- read.table(paste(tmp, '.tsv', sep=''), sep='\t')
+		ans <- read.table(paste(tmp, '.tsv', sep=''), sep='\t', header=TRUE, comment.char='')
 		names(ans) <- scan(paste(tmp, '.tsv', sep=''), nlines=1, what=character(), quiet=TRUE)
 		cat('DONE\n')
 		flush.console()
@@ -389,7 +389,7 @@ collateMSGFplus <- function(directory, database, useML=FALSE, ...){
 		flush.console()
 		database <- file.choose()
 	} else {}
-	cat(paste('Database contains ', length(read.AAStringSet(database)), ' sequences...\n', sep=''))
+	cat(paste('Database contains ', length(readAAStringSet(database)), ' sequences...\n', sep=''))
 	flush.console()
 	res <- list()
 	for(i in 1:length(files)){
@@ -451,7 +451,7 @@ pepID <- function(type, path=file.choose(), sep='\t', dec='.', directory, databa
 				rt <- raw$retentionTime[match(scan, raw$acquisitionNum)]
 				data$rt[ind] <- rt
 			}
-			db <- read.AAStringSet(database)
+			db <- readAAStringSet(database)
 		} else {stop('Only MSGF+, MassAI and Crosswork supported')}
         new(Class='PepID', type=type, raw=data, database=db)
     }

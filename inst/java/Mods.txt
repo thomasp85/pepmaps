@@ -41,5 +41,5 @@ O1,M,opt,any,Oxidation				# Oxidation M
 #H-3N-1,Q,opt,N-term,Gln->pyro-Glu			# Pyro-glu from Q
 C2H2O,*,opt,Prot-N-term,Acetyl			# Acetylation Protein N-term
 #C2H2O1,K,opt,any,Acetyl			# Acetylation K
-#CH2,K,opt,any,Methy				# Methylation K
+#CH2,K,opt,any,Methyl				# Methylation K
 #HO3P,STY,opt,any,Phospho			# Phosphorylation STY

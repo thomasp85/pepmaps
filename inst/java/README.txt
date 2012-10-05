@@ -13,3 +13,7 @@ Usage Information
 
 Contact Information
 	- Sangtae Kim (sak008@ucsd.edu)
+
+Publications
+	- MS-GF+: Universal Database Search Tool for Mass Spectrometry, Sangtae Kim, Pavel A. Pevzner, submitted.
+	- Spectral Probabilities and Generating Functions of Tandem Mass Spectra: A Strike against Decoy Databases, Sangtae Kim, Nitin Gupta and Pavel Pevzner, J. Proteome Res., 7 (8), 3354-3363, 2008.
