@@ -9,7 +9,8 @@ setClass(
         peplist='data.frame',
 		database='AAStringSet',
         npep='numeric',
-        nsample='numeric'
+        nsample='numeric',
+		FDR='numeric'
     ),
     validity = function(object){
         if(length(object@type) != 0){
@@ -25,7 +26,7 @@ setClass(
 ### Calls validObject
 setMethod(
     'initialize', 'PepID',
-    function(.Object, type, raw, database){
+    function(.Object, type, raw, database, FDR){
         if(length(type) == 0){
             .Object@type <- character()
             .Object@raw <- data.frame()
@@ -37,6 +38,7 @@ setMethod(
             .Object@type <- type
             .Object@raw <- raw
 			.Object@database <- database
+			.Object@FDR <- FDR
             if(type == 'MassAI'){
                 .Object@nsample <- length(unique(raw$File))
                 .Object@npep <- length(unique(paste(raw$ProteinAID, raw$PeptideAID, sep='-')))
@@ -63,19 +65,26 @@ setMethod(
 				.Object@npep <- length(unique(raw$Peptide.ID))
 				cPep <- function(x){
 					seq <- strsplit(as.character(x$Peptide[1]), '.', fixed=T)[[1]][2]
+					seq <- gsub('\\+([\\d]|,)+', '', seq, perl=TRUE)
 					ind <- gregexpr(seq, as.character(database[names(database) == x$Protein[1]]))[[1]]
 					name <- paste(x$Protein[1], ' (', paste(ind, collapse='/'), '-', paste(ind + attr(ind, 'match.length') - 1, collapse='/'), ')', sep='')
-					rt <- mean(x$rt)
-					mz <- mean(x$Precursor)
-					charge <- mean(x$Charge)
+					if(sum(x$QValue < FDR) != 0){
+						best <- which(x$QValue < FDR)
+						rt <- median(x$rt[best])
+						mz <- median(x$Precursor[best])
+					} else {
+						rt <- median(x$rt)
+						mz <- median(x$Precursor)
+					}
 					mass <- pepMass(seq, mono=TRUE)
 					m.err <- mean(x$'PrecursorError(Da)')
 					prot <- x$Protein[1]
 					fdr <- min(x$QValue)
-					data.frame(name, seq, rt, mz, charge, mass, m.err, prot, fdr)
+					data.frame(name, seq, rt, mz, mass, m.err, prot, fdr)
 				}
-				peplist <- ddply(raw, .(Peptide.ID), cPep)
-				names(peplist) <- c('Peptide.ID', 'Peptide.name', 'Sequence', 'Retention.time', 'mz', 'Charge', 'Mass', 'Mass.error', 'Protein', 'FDR')
+				peplist <- ddply(raw, .(Peptide.ID, Charge), cPep)
+				names(peplist) <- c('Peptide.ID', 'Charge', 'Peptide.name', 'Sequence', 'Retention.time', 'mz', 'Mass', 'Mass.error', 'Protein', 'FDR')
+				peplist$Peptide.ID <- paste(peplist$Peptide.ID, '_', peplist$Charge, sep='')
 				.Object@peplist <- peplist
 			} else {}
             .Object@peplist <- data.frame(.Object@peplist, Qval(as.character(.Object@peplist$Sequence)), Length=nchar(as.character(.Object@peplist$Sequence)))
@@ -94,6 +103,7 @@ setMethod(
         } else {
             cat('A PepID object created from a', object@type, 'analysis.\n\n')
             cat(object@npep, 'different peptides detected in', object@nsample, 'samples.\n')
+			cat('\t', sum(object@peplist$FDR < object@FDR), ' peptides within FDR threshold (', object@FDR, ')\n', sep='')
         }
     }
 )
@@ -113,8 +123,12 @@ setMethod(
 ### getPeplist
 setMethod(
     'getPeplist', 'PepID',
-    function(object){
-        ans <- object@peplist
+    function(object, useFDR=TRUE){
+		if(useFDR){
+			ans <- object@peplist[object@peplist$FDR < object@FDR, ]
+		} else {
+			ans <- object@peplist
+		}
         ans
     }
 )
@@ -253,7 +267,7 @@ setMethod(
 )
 
 ### Run MSGFDB through R
-MSGFplus <- function(file, database, tolerance, tda=TRUE, instrument, protease, lengthRange, chargeRange, verbose=FALSE) {
+MSGFplus <- function(file, database, tolerance, tda=TRUE, instrument, protease, lengthRange, chargeRange, verbose=FALSE, memory=10000) {
 	if(missing(file)){
 		cat('Choose spectrum file...\n')
 		flush.console()
@@ -340,25 +354,30 @@ MSGFplus <- function(file, database, tolerance, tda=TRUE, instrument, protease, 
 		call <- paste(call, ' -minCharge ', chargeRange[1], ' -maxCharge ', chargeRange[2], sep='')
 	} else {}
 	
-	call <- paste('java -Xmx10000M -jar ', R.home(component='library/pepmaps/java/MSGFplus.jar'), ' ', call, sep='')
+	call <- paste('java -Xmx', memory, 'M -jar ', R.home(component='library/pepmaps/java/MSGFplus.jar'), ' ', call, sep='')
 	
 	unlink(paste(tmp, '*', sep=''))
 	
 	system(call, ignore.stderr=TRUE, ignore.stdout=!verbose)
 	cat('Importing results...')
 	flush.console()
-	callConv <- paste('java -Xmx10000M -cp ', R.home(component='library/pepmaps/java/MSGFplus.jar'), ' edu.ucsd.msjava.ui.MzIDToTsv -i ', tmp, ' -o ', paste(tmp, '.tsv', sep=''), ' -unroll 1')
+	callConv <- paste('java -Xmx', memory, 'M -cp ', R.home(component='library/pepmaps/java/MSGFplus.jar'), ' edu.ucsd.msjava.ui.MzIDToTsv -i ', tmp, ' -o ', paste(tmp, '.tsv', sep=''), ' -unroll 1', sep='')
 	system(callConv)
 	
 	if(length(scan(paste(tmp, '.tsv', sep=''), skip=1, nlines=1, what='character', quiet=T)) == 0){
 		warning(paste('No peptides detected in ', basename(file), sep=''))
 		unlink(paste(tmp, '*', sep=''))
+		return(NULL)
 	} else {
 		ans <- read.table(paste(tmp, '.tsv', sep=''), sep='\t', header=TRUE, comment.char='')
 		names(ans) <- scan(paste(tmp, '.tsv', sep=''), nlines=1, what=character(), quiet=TRUE)
 		cat('DONE\n')
 		flush.console()
 		unlink(paste(tmp, '*', sep=''))
+		sNum <- regexpr('scanId=[\\d]+', ans$SpecID, perl=TRUE)
+		sNum <- substr(ans$SpecID, sNum, sNum+attr(sNum, 'match.length')-1)
+		sNum <- sub('scanId=', '', sNum)
+		ans$ScanNum <- sNum
 		ans
 	}
 }
@@ -392,10 +411,12 @@ collateMSGFplus <- function(directory, database, useML=FALSE, ...){
 	cat(paste('Database contains ', length(readAAStringSet(database)), ' sequences...\n', sep=''))
 	flush.console()
 	res <- list()
+	unlink(R.home(component='library/pepmaps/msgfCache_*'))
 	for(i in 1:length(files)){
 		cat(paste(basename(files[i]), ' ', sep=''))
 		flush.console()
 		res[[i]] <- MSGFplus(files[i], database, ...)
+		write.table(res[[i]], file=paste(R.home(component='library/pepmaps/msgfCache_'), i, '.txt', sep=''), sep='\t', row.names=FALSE)
 	}
 	cat('\n')
 	flush.console()
@@ -406,12 +427,16 @@ collateMSGFplus <- function(directory, database, useML=FALSE, ...){
 	names(res) <- sub('#', '', names(res))
 	if(useML){
 		res$SpecFile <- sub('.mzML$', '.mzXML', res$SpecFile)
+	} else {
+		if(res$ScanNum[1] == ''){
+			res$ScanNum <- as.numeric(sub('scan=', '', res$SpecID))
+		} else {}
 	}
 	res
 }
 ### Constructor for PepID objects
 ### Ask for location of MassAI/Crosswork results and creates the PepID object accordingly
-pepID <- function(type, path=file.choose(), sep='\t', dec='.', directory, database, useML=FALSE, ...){
+pepID <- function(type, path=file.choose(), FDR=0.01, sep='\t', dec='.', directory, database, useML=FALSE, ...){
     if(missing(type)){
         new(Class='PepID', type=character(), raw=data.frame())
     } else {
@@ -447,12 +472,14 @@ pepID <- function(type, path=file.choose(), sep='\t', dec='.', directory, databa
 			for(i in 1:length(datafiles)){
 				raw <- mzR::header(mzR::openMSfile(datafiles[i]))
 				ind <- which(data$SpecFile == basename(datafiles)[i])
-				scan <- data$Scan[ind]
+				scan <- data$ScanNum[ind]
 				rt <- raw$retentionTime[match(scan, raw$acquisitionNum)]
+				mz <- raw$precursorMZ[match(scan, raw$acquisitionNum)]
 				data$rt[ind] <- rt
+				data$Precursor[ind] <- mz
 			}
 			db <- readAAStringSet(database)
 		} else {stop('Only MSGF+, MassAI and Crosswork supported')}
-        new(Class='PepID', type=type, raw=data, database=db)
+        new(Class='PepID', type=type, raw=data, database=db, FDR=FDR)
     }
 }

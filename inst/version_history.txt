@@ -1,4 +1,18 @@
 Version history
+
+### 1.7
+- Rewritten indexing to take FDR into account - An FDR cutoff is supplied in the pepID object and most methods have a FDR argument along with outlier.rm to manage FDR filtering
+- Rewritten filtering to match above
+- Added plotDetection to show quality of ID
+- Tuning of parametersets
+- Solved bug requiring that at least one mix sample was selected
+- Solved bug requiring the strict use of useML=TRUE in createComplist
+- Fixed bug that would erroneous warn about datafile mismatch when using cache=TRUE in createComplist
+- Added result cache for each file in collateMSGFplus
+
+### 1.6
+- Added mixReport to create a PCA plot showing the position of master mixes
+
 ### 1.5
 - Added support for MSGF+ along MassAI and Crossworks. MSGF+ is packed together with pepmaps
 - Standardized peplist format across all ID algorithms

@@ -41,26 +41,23 @@ selectMatch <- function(peplist, mass=numeric(), mass.tolerance=0.1, IDtype='MSG
 		if(nrow(peplist) == 1){
 			peplist
 		} else {
-			peplist <- peplist[which(peplist$FDR == min(peplist$FDR)), ]
+			peplist <- peplist[which.min(peplist$FDR), ]
 			if(nrow(peplist) == 1){
 				peplist
 			} else {
-				peplist <- peplist[which(abs(peplist$Mass.error) == min(abs(peplist$Mass.error))), ]
-				if(nrow(peplist) == 1){
-					peplist
-				} else {
-					peplist <- peplist[1,]
-					peplist$Peptide.ID <- NA
-					peplist$Peptide.name <- 'Ambiguous'
-					peplist$Protein <- NA
-					if(length(unique(peplist$Sequence)) > 1){
-						peplist$Sequence <- 'x'
-						peplist$Q_value <- NA
-						peplist$Bitter <- NA
-						peplist$Length <- NA
-					} else {}
-					peplist
-				}
+				peplist1 <- peplist[1,]
+				peplist1$Peptide.ID <- NA
+				peplist1$Peptide.name <- 'Ambiguous'
+				if(length(unique(peplist$Protein)) > 1){
+					peplist1$Protein <- NA
+				} else {}
+				if(length(unique(peplist$Sequence)) > 1){
+					peplist1$Sequence <- 'x'
+					peplist1$Q_value <- NA
+					peplist1$Bitter <- NA
+					peplist1$Length <- NA
+				} else {}
+				peplist1
 			}
 		}
 	}
@@ -289,21 +286,21 @@ ggPair <- function(data, group, cor.method='pearson'){
     p <- p + geom_line(data=dens)
     p <- p + geom_text(data=corr, aes(label=label, size=size)) + scale_size(legend=FALSE)
     p <- p + theme_bw() + xlab('') + ylab('')
-    p <- p + opts(panel.grid.minor=theme_blank(), panel.grid.major=theme_blank())
+    p <- p + theme(panel.grid.minor=element_blank(), panel.grid.major=element_blank())
     p
 }
 ### Correlation heatmap using ggplot2
 ggCorr <- function(data, method='pearson'){
     test <- cor(data, method=method)
     test <- melt(test)
-	names(test) <- c(X, Y, value)
+	names(test) <- c('X', 'Y', 'value')
     test$X <- factor(test$X, levels=colnames(data))
     test$Y <- factor(test$Y, levels=colnames(data))
     p <- ggplot(data=test, aes(x=X, y=Y, fill=value))
     p <- p + geom_raster()
     p <- p + scale_fill_gradientn(paste(method, '\ncorrelation'), colours=c('red', 'white', 'green'), breaks=c(1,0.8,0.6,0.4,0.2,0,-0.2,-0.4,-0.6,-0.8,-1), limits=c(-1,1), space='Lab')
     p <- p + theme_bw() + xlab('') + ylab('')
-    p <- p + opts(axis.text.x=theme_text(angle=-45, hjust=0, vjust=1))
+    p <- p + theme(axis.text.x=element_text(angle=-45, hjust=0, vjust=1))
     p <- p + scale_x_discrete(expand=c(0,0)) + scale_y_discrete(expand=c(0,0))
     p
 }
@@ -391,6 +388,44 @@ findName <- function(x, name){
         }
     } else {}
     ans
+}
+## Rescales retention time for ID's based on rt correction in MS1 level
+rescalePeplist <- function(files, rtcorrection, pepID){
+	raw <- pepID@raw
+	newRT <- rep(NA, nrow(raw))
+	for(i in 1:length(files)){
+		index <- which(raw$SpecFile == files[i])
+		oldRT <- raw$rt[index]
+		corRT <- sapply(oldRT, function(x) rtcorrection$corrected[[i]][which.min(abs(rtcorrection$raw[[i]] - x))])
+		newRT[index] <- corRT
+	}
+	raw$rt <- newRT
+	
+	cPep <- function(x){
+		seq <- strsplit(as.character(x$Peptide[1]), '.', fixed=T)[[1]][2]
+		seq <- gsub('\\+([\\d]|,)+', '', seq, perl=TRUE)
+		ind <- gregexpr(seq, as.character(pepID@database[names(pepID@database) == x$Protein[1]]))[[1]]
+		name <- paste(x$Protein[1], ' (', paste(ind, collapse='/'), '-', paste(ind + attr(ind, 'match.length') - 1, collapse='/'), ')', sep='')
+		if(sum(x$QValue < 0.01) != 0){
+			best <- which(x$QValue < 0.01)
+			rt <- median(x$rt[best])
+			mz <- median(x$Precursor[best])
+		} else {
+			rt <- median(x$rt)
+			mz <- median(x$Precursor)
+		}
+		mass <- pepMass(seq, mono=TRUE)
+		m.err <- mean(x$'PrecursorError(Da)')
+		prot <- x$Protein[1]
+		fdr <- min(x$QValue)
+		data.frame(name, seq, rt, mz, mass, m.err, prot, fdr)
+	}
+	
+	peplist <- ddply(raw, .(Peptide.ID, Charge), cPep)
+	names(peplist) <- c('Peptide.ID', 'Charge', 'Peptide.name', 'Sequence', 'Retention.time', 'mz', 'Mass', 'Mass.error', 'Protein', 'FDR')
+	peplist$Peptide.ID <- paste(peplist$Peptide.ID, '_', peplist$Charge, sep='')
+	pepID@peplist <- peplist
+	pepID
 }
 ## convert using msconvert
 convertData <- function(files, location, convertTo=c('mzXML')){
@@ -487,33 +522,35 @@ denCut <- function(dendro, cut){
 }
 ## Recalculate dendrogram to fit new leaf origin position
 denRescale <- function(dendro, oldPos, newPos){
-    start <- which(dendro$segments$xend==oldPos & dendro$segments$yend==0)
-    if(length(start) == 0) stop(paste('No leaf at: ', oldPos)) else {}
-    labindex <- which(dendro$labels$x == oldPos)
-    if(!all((dendro$labels$x[-labindex] >= oldPos) == (dendro$labels$x[-labindex] >= newPos))){
-    	stop('New position changes order of leafs')
-    } else {}
-    if(any(newPos == dendro$labels$x)){
-    	stop('New position coincide with another leaf')
-    } else {}
-    dendro$labels$x[labindex] <- newPos
-    changefrom <- oldPos
-    changeto <- newPos
-    while(start >= 1){
-    	dendro$segments$xend[start] <- changeto
-    	dendro$segments$x[start] <- changeto
-    	horiz <- which(dendro$segments$y == dendro$segments$y[start] & dendro$segments$yend == dendro$segments$y[start])
-    	connect <- horiz[which(apply(dendro$segments[horiz, c('x', 'xend')], 1, function(x) any(x == changefrom)))]
-    	follow <- horiz[which(horiz != connect)]
-    	ends <- which(dendro$segments[connect, ] != dendro$segments[follow, ])
-    	join <- if(ends==3) 1 else 3
-    	start <- which(dendro$segments$xend == dendro$segments[connect, join] & dendro$segments$yend == dendro$segments[connect, 'yend'])
-    	if(length(start) == 0) start <- 0 else {}
-    	dendro$segments[connect, ends] <- changeto
-    	changefrom <- dendro$segments$xend[start]
-    	changeto <- min(dendro$segments[horiz, ends]) + diff(dendro$segments[horiz, ends])/2
-    	dendro$segments[horiz, join] <- changeto
-    }
+	if(oldPos != newPos){
+		start <- which(dendro$segments$xend==oldPos & dendro$segments$yend==0)
+		if(length(start) == 0) stop(paste('No leaf at: ', oldPos)) else {}
+		labindex <- which(dendro$labels$x == oldPos)
+		if(!all((dendro$labels$x[-labindex] >= oldPos) == (dendro$labels$x[-labindex] >= newPos))){
+			stop('New position changes order of leafs')
+		} else {}
+		if(any(newPos == dendro$labels$x)){
+			stop('New position coincide with another leaf')
+		} else {}
+		dendro$labels$x[labindex] <- newPos
+		changefrom <- oldPos
+		changeto <- newPos
+		while(start >= 1){
+			dendro$segments$xend[start] <- changeto
+			dendro$segments$x[start] <- changeto
+			horiz <- which(dendro$segments$y == dendro$segments$y[start] & dendro$segments$yend == dendro$segments$y[start])
+			connect <- horiz[which(apply(dendro$segments[horiz, c('x', 'xend')], 1, function(x) any(x == changefrom)))]
+			follow <- horiz[which(horiz != connect)]
+			ends <- which(dendro$segments[connect, ] != dendro$segments[follow, ])
+			join <- if(ends==3) 1 else 3
+			start <- which(dendro$segments$xend == dendro$segments[connect, join] & dendro$segments$yend == dendro$segments[connect, 'yend'])
+			if(length(start) == 0) start <- 0 else {}
+			dendro$segments[connect, ends] <- changeto
+			changefrom <- dendro$segments$xend[start]
+			changeto <- min(dendro$segments[horiz, ends]) + diff(dendro$segments[horiz, ends])/2
+			dendro$segments[horiz, join] <- changeto
+		}
+	}
     dendro
 }
 ## heatmap
@@ -920,8 +957,8 @@ ggHeat <- function(data, colfactor, rowfactor, cGroup, rGroup, cOrder, rOrder, h
 				if(colfac[[i]][[1]]$type[1] == 'seq'){
 					dat <- data.frame(x=1:9, y=1, fill=1:9)
 					l <- qplot(x, y, data=dat, geom='tile', fill=factor(fill))
-					l <- l + scale_fill_brewer(colfacname[i], breaks=1:9, labels=c(min(do.call('rbind', colfac[[i]])$value), rep('', 7), max(do.call('rbind', colfac[[i]])$value)), palette=colfac[[i]][[1]]$Palet[1])
-					l <- l + opts(legend.justification='top')
+					l <- l + scale_fill_brewer(colfacname[i], breaks=1:9, labels=c(min(do.call('rbind', colfac[[i]])$value), rep('', 7), max(do.call('rbind', colfac[[i]])$value)), palette=colfac[[i]][[1]]$Palet[1], guide=guide_legend(nrow=9))
+					l <- l + theme(legend.position='top', legend.direction='vertical')
 					if(version == '0.8.9'){
 						l <- l + opts(keep='legend_box', legend.position='left')
 					} else {
@@ -933,8 +970,8 @@ ggHeat <- function(data, colfactor, rowfactor, cGroup, rGroup, cOrder, rOrder, h
 				} else {
 					dat <- ldply(colfac[[i]], function(x) x[1,])
 					l <- qplot(x, y, data=dat, geom='tile', fill=.id)
-					l <- l + scale_fill_manual(colfacname[i], values=dat$colour, breaks=dat$.id)
-					l <- l + opts(legend.justification='top')
+					l <- l + scale_fill_manual(colfacname[i], values=dat$colour, breaks=dat$.id, guide=guide_legend(nrow=9))
+					l <- l + theme(legend.position='top', legend.direction='vertical')
 					if(version == '0.8.9'){
 						l <- l + opts(keep='legend_box', legend.position='left')
 					} else {
@@ -960,8 +997,8 @@ ggHeat <- function(data, colfactor, rowfactor, cGroup, rGroup, cOrder, rOrder, h
 				if(rowfac[[i]][[1]]$type[1] == 'seq'){
 					dat <- data.frame(x=1:9, y=1, fill=1:9)
 					l <- qplot(x, y, data=dat, geom='tile', fill=factor(fill))
-					l <- l + scale_fill_brewer(rowfacname[i], breaks=1:9, labels=c(min(do.call('rbind', rowfac[[i]])$value), rep('', 7), max(do.call('rbind', rowfac[[i]])$value)), palette=rowfac[[i]][[1]]$Palet[1])
-					l <- l + opts(legend.justification='top')
+					l <- l + scale_fill_brewer(rowfacname[i], breaks=1:9, labels=c(min(do.call('rbind', rowfac[[i]])$value), rep('', 7), max(do.call('rbind', rowfac[[i]])$value)), palette=rowfac[[i]][[1]]$Palet[1], guide=guide_legend(nrow=9))
+					l <- l + theme(legend.position='top', legend.direction='vertical')
 					if(version == '0.8.9'){
 						l <- l + opts(keep='legend_box', legend.position='left')
 					} else {
@@ -973,8 +1010,8 @@ ggHeat <- function(data, colfactor, rowfactor, cGroup, rGroup, cOrder, rOrder, h
 				} else {
 					dat <- ldply(rowfac[[i]], function(x) x[1,])
 					l <- qplot(x, y, data=dat, geom='tile', fill=.id)
-					l <- l + scale_fill_manual(rowfacname[i], values=dat$colour, breaks=dat$.id)
-					l <- l + opts(legend.justification='top')
+					l <- l + scale_fill_manual(rowfacname[i], values=dat$colour, breaks=dat$.id, guide=guide_legend(nrow=9))
+					l <- l + theme(legend.position='top', legend.direction='vertical')
 					if(version == '0.8.9'){
 						l <- l + opts(keep='legend_box', legend.position='left')
 					} else {
@@ -1298,10 +1335,10 @@ ggHeat <- function(data, colfactor, rowfactor, cGroup, rGroup, cOrder, rOrder, h
 		p <- p + scale_fill_gradientn(dataname, colours=c('blue', 'black', 'red'), space='Lab', guide=guide_colourbar())
 		
 		## Set options
-		p <- p + opts(axis.text.x=theme_text(angle=-90, hjust=0, size=8, vjust=0.2), axis.text.y=theme_text(hjust=1, size=8))
-		p <- p + opts(panel.border=theme_blank()) + opts(strip.text.y=theme_blank(), strip.text.x=theme_blank(), strip.background=theme_blank())
-		p <- p + opts(panel.grid.major=theme_blank(), panel.grid.minor=theme_blank())
-		p <- p + opts(title=title)
+		p <- p + theme(axis.text.x=element_text(angle=-90, hjust=0, size=8, vjust=0.2), axis.text.y=element_text(hjust=1, size=8))
+		p <- p + theme(panel.border=element_blank()) + theme(strip.text.y=element_blank(), strip.text.x=element_blank(), strip.background=element_blank())
+		p <- p + theme(panel.grid.major=element_blank(), panel.grid.minor=element_blank())
+		p <- p + ggtitle(title)
 		thetimer$Setup.plot <- (proc.time() - start)[3]
 		start <- proc.time()
 		

@@ -123,7 +123,7 @@ setGeneric(
 ### Used by Complist
 setGeneric(
     'plotChromatogram',
-    def=function(object, Sample, retcor, type, colour, outlier.rm, mix.rm, rtwin, title, nPeptides){standardGeneric('plotChromatogram')}
+    def=function(object, Sample, retcor, type, colour, outlier.rm, mix.rm, filter, FDR, rtwin, title, nPeptides){standardGeneric('plotChromatogram')}
 )
 ### Used by Complist
 setGeneric(
@@ -134,6 +134,11 @@ setGeneric(
 setGeneric(
 		'plotCoverage',
 		def=function(object, ...){standardGeneric('plotCoverage')}
+)
+### Used by Complist
+setGeneric(
+		'plotDetection',
+		def=function(object, ...){standardGeneric('plotDetection')}
 )
 ### Used by Complist
 setGeneric(
@@ -194,6 +199,11 @@ setGeneric(
 setGeneric(
 		'chromReport',
 		def=function(object, ...){standardGeneric('chromReport')}
+)
+### Used by Complist
+setGeneric(
+		'mixReport',
+		def=function(object, ...){standardGeneric('mixReport')}
 )
 ### Used by Complist
 setGeneric(
@@ -264,6 +274,11 @@ setGeneric(
 setGeneric(
     'reMatch',
     def=function(object, ...){standardGeneric('reMatch')}
+)
+### Used by Complist
+setGeneric(
+		'reSetFDR',
+		def=function(object, ...){standardGeneric('reSetFDR')}
 )
 ### Used by xcmsRaw
 setGeneric(

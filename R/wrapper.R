@@ -2,7 +2,7 @@
 
 ### createComplist
 ### Wrapper function to create xcmsSet and PepID and combine the information into a Complist object
-createComplist <- function(mzXML, Sample.info, ID='MSGF+', IDdir, database='milk_prot', cache=FALSE, par='standard', sep='\t', dec='.', annotate=FALSE, retcor=TRUE, useML=FALSE){
+createComplist <- function(mzXML, Sample.info, ID='MSGF+', FDR=0.01, IDdir, database='milk_prot', cache=FALSE, par='standard', sep='\t', dec='.', annotate=FALSE, retcor=TRUE, useML=FALSE, ...){
     first <- proc.time()
 	
 	# Input check
@@ -26,20 +26,22 @@ createComplist <- function(mzXML, Sample.info, ID='MSGF+', IDdir, database='milk
         mix <- as.numeric(unlist(strsplit(mix, ' ')))
         mmix <- rep(FALSE, length(mzXML))
         mmix[mix] <- TRUE
-        if(missing(Sample.info)){
-            Sample.info <- data.frame(Master.mix=mmix)
-        } else {
-            Sample.info$Master.mix <- mmix
-        }
         cat('The following samples has been set as master mixtures:\n\n', paste(basename(mzXML[mix]), collapse='\n'), '\n\n', sep='')
     } else {
-        mix <- c()
+		mmix <- rep(FALSE, length(mzXML))
         cat('No master mixtures in experiment...\n')
     }
+	if(missing(Sample.info)){
+		Sample.info <- data.frame(Master.mix=mmix)
+	} else {
+		Sample.info$Master.mix <- mmix
+	}
     flush.console()
 	
 	# Extracts parameters
-    par <- parameters(par)
+	if(class(par) != 'Parameters'){
+		par <- parameters(par)
+	}
 	
 	# Creates PepID object
 	cat('\nAnalysing peptide ID data...\n\n')
@@ -53,13 +55,13 @@ createComplist <- function(mzXML, Sample.info, ID='MSGF+', IDdir, database='milk
 			} else {
 				stop('No cache on drive...')
 			}
-			if(!all(unique(ID@raw$SpecFile) %in% mzXML)){
+			if(!all(unique(ID@raw$SpecFile) %in% basename(mzXML))){
 				cat('Warning: Samples in cache does not match samples in analysis\n')
 				flush.console()
 			} else {}
 		} else {
 			type <- ID
-			para <- c(type=type, directory=dirname(mzXML[1]), database=database, useML=useML, par@parameters$MSGFplus)
+			para <- c(type=type, directory=dirname(mzXML[1]), database=database, useML=useML, FDR=FDR, par@parameters$MSGFplus, ...)
 			ID <- do.call('pepID', para)
 			save(ID, file=R.home(component='library/pepmaps/msgfdb_res.cache.RData'))
 		}
@@ -97,10 +99,11 @@ createComplist <- function(mzXML, Sample.info, ID='MSGF+', IDdir, database='milk
         if(retcor){
 			cat('\nCorrecting shifts in retention time...\n\n')
 			flush.console()
-            if(length(mix) != 0){
+            if(any(Sample.info$Master.mix)){
                 par@parameters$retcor$center <- mix[round(median(1:length(mix)))]
             } else {}
             xset <- do.call('retcor', c(list(object=xset), par@parameters$retcor))
+			ID <- rescalePeplist(basename(xset@filepaths), xset@rt, ID)
         } else {}
 		cat('\nGrouping peaks between samples...\n\n')
 		flush.console()
@@ -130,14 +133,10 @@ createComplist <- function(mzXML, Sample.info, ID='MSGF+', IDdir, database='milk
 }
 ### pepReport
 ### Report function for Complist
-pepReport <- function(object, group=NULL, folder=NULL, outlier.rm=TRUE, mix.rm=TRUE){
-	
+pepReport <- function(object, group=NULL, folder=NULL, outlier.rm=TRUE, mix.rm=TRUE, FDR=TRUE){
 	# Input check
     if(class(object) != 'Complist'){
         stop('Wrong object type. Provide a Complist object...\n')
-    } else {}
-    if(sum(names(object@peakID) %in% 'Peptides') != 1){
-        stop('Incorect peptide data...\n')
     } else {}
     if(!missing(folder)){
         if(!is.character(folder) | length(folder) != 1){
@@ -148,17 +147,17 @@ pepReport <- function(object, group=NULL, folder=NULL, outlier.rm=TRUE, mix.rm=T
     } else {}
 	
 	# Create reports
-    intensityReport(object, folder=folder, outlier.rm=outlier.rm, mix.rm=mix.rm)
-	coverageReport(object, folder=folder, outlier.rm=outlier.rm, mix.rm=mix.rm)
+    intensityReport(object, folder=folder, outlier.rm=outlier.rm, mix.rm=mix.rm, FDR=FDR)
+	coverageReport(object, folder=folder, outlier.rm=outlier.rm, mix.rm=mix.rm, FDR=FDR)
     chromReport(object, folder=folder, outlier.rm=outlier.rm, mix.rm=mix.rm)
-    pcaReport(object, folder=folder, outlier.rm=outlier.rm, mix.rm=mix.rm, group=group)
+    pcaReport(object, folder=folder, outlier.rm=outlier.rm, mix.rm=mix.rm, group=group, FDR=FDR)
 	gc()
-	peakReport(object, folder=folder, outlier.rm=outlier.rm, mix.rm=mix.rm, group=group)
+	peakReport(object, folder=folder, outlier.rm=outlier.rm, mix.rm=mix.rm, group=group, FDR=FDR)
 	
 	# Feedback
     cat('\nDone...\n')
     if(outlier.rm){
-        out <- row.names(object@Sample.info)[object@outlier$Sample]
+        out <- row.names(object@Sample.info)[object@filter$Samples$Outlier]
         if(length(out) > 0){
             cat('\nOutlier samples removed:', paste(out, collapse=', ', '\n', sep=' '))
         } else {}

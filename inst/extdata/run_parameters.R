@@ -37,8 +37,8 @@ param <- list(standard=list(
         Type='LC-MS/MS',
         findPeak=list(
             method='centWave',
-            ppm=25,
-            peakwidth=c(5, 20),
+            ppm=15,
+            peakwidth=c(5, 30),
             snthresh=5,
             prefilter=c(1, 3000)
         ),
@@ -49,8 +49,9 @@ param <- list(standard=list(
         ),
         group=list(
             mzwid=0.1,
-            bw=1.5,
-            minfrac=0.05
+            bw=10,
+            minfrac=0,
+			minsamp=1
         ),
         annotate=list(
             polarity='positive'
@@ -65,15 +66,15 @@ param <- list(standard=list(
 				verbose=FALSE
 		),
         Complist=list(
-            mzwin=0,
-            rtwin=0
+            mzwin=0.05,
+            rtwin=5
         )
     ), UPLC.HSrtdev=list(
         Type='LC-MS/MS',
         findPeak=list(
             method='centWave',
-            ppm=25,
-            peakwidth=c(5, 20),
+            ppm=15,
+            peakwidth=c(5, 30),
             snthresh=5,
             prefilter=c(1, 3000)
         ),
@@ -84,8 +85,9 @@ param <- list(standard=list(
         ),
         group=list(
             mzwid=0.1,
-            bw=1.5,
-            minfrac=0.05
+            bw=10,
+            minfrac=0,
+			minsamp=1
         ),
         annotate=list(
             polarity='positive'
@@ -100,15 +102,15 @@ param <- list(standard=list(
 				verbose=FALSE
 		),
         Complist=list(
-            mzwin=0,
-            rtwin=2
+            mzwin=0.05,
+            rtwin=10
         )
     ), UPLC.MS=list(
         Type='LC-MS/MS',
         findPeak=list(
             method='centWave',
-            ppm=25,
-            peakwidth=c(5, 20),
+            ppm=15,
+            peakwidth=c(5, 30),
             snthresh=5,
             prefilter=c(1, 1000)
         ),
@@ -119,8 +121,9 @@ param <- list(standard=list(
         ),
         group=list(
             mzwid=0.1,
-            bw=1.5,
-            minfrac=0.05
+            bw=10,
+            minfrac=0,
+			minsamp=1
         ),
         annotate=list(
             polarity='positive'
@@ -135,15 +138,15 @@ param <- list(standard=list(
 				verbose=FALSE
 		),
         Complist=list(
-            mzwin=0,
-            rtwin=0
+            mzwin=0.05,
+            rtwin=5
         )
     ), UPLC.MSrtdev=list(
         Type='LC-MS/MS',
         findPeak=list(
             method='centWave',
-            ppm=25,
-            peakwidth=c(5, 20),
+            ppm=15,
+            peakwidth=c(5, 30),
             snthresh=5,
             prefilter=c(1, 1000)
         ),
@@ -154,8 +157,9 @@ param <- list(standard=list(
         ),
         group=list(
             mzwid=0.1,
-            bw=1.5,
-            minfrac=0.05
+            bw=10,
+            minfrac=0,
+			minsamp=1
         ),
         annotate=list(
             polarity='positive'
@@ -170,15 +174,15 @@ param <- list(standard=list(
 				verbose=FALSE
 		),
         Complist=list(
-            mzwin=0,
-            rtwin=2
+            mzwin=0.05,
+            rtwin=10
         )
     ), UPLC.LS=list(
         Type='LC-MS/MS',
         findPeak=list(
             method='centWave',
-            ppm=25,
-            peakwidth=c(5, 20),
+            ppm=15,
+            peakwidth=c(5, 30),
             snthresh=5,
             prefilter=c(3, 100)
         ),
@@ -189,8 +193,9 @@ param <- list(standard=list(
         ),
         group=list(
             mzwid=0.1,
-            bw=1.5,
-            minfrac=0.05
+            bw=10,
+            minfrac=0,
+			minsamp=1
         ),
         annotate=list(
             polarity='positive'
@@ -205,15 +210,15 @@ param <- list(standard=list(
 				verbose=FALSE
 		),
         Complist=list(
-            mzwin=0,
-            rtwin=0
+            mzwin=0.05,
+            rtwin=5
         )
     ), UPLC.LSrtdev=list(
         Type='LC-MS/MS',
         findPeak=list(
             method='centWave',
-            ppm=25,
-            peakwidth=c(5, 20),
+            ppm=15,
+            peakwidth=c(5, 30),
             snthresh=5,
             prefilter=c(3, 100)
         ),
@@ -224,8 +229,9 @@ param <- list(standard=list(
         ),
         group=list(
             mzwid=0.1,
-            bw=1.5,
-            minfrac=0.05
+            bw=10,
+            minfrac=0,
+			minsamp=1
         ),
         annotate=list(
             polarity='positive'
@@ -240,8 +246,8 @@ param <- list(standard=list(
 				verbose=FALSE
 		),
         Complist=list(
-            mzwin=0,
-            rtwin=0
+            mzwin=0.05,
+            rtwin=10
         )
     )
 )

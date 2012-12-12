@@ -1,13 +1,13 @@
 Package: pepmaps
 Type: Package
 Title: Create peptide maps by merging xcms (and CAMERA) with MassAI
-Version: 1.5-6
+Version: 1.7-1
 Date: 2011-10-04
 Author: Thomas Dybdal Pedersen
 Maintainer: Thomas Dybdal Pedersen <thomasp85@gmail.com>
 Description: This program facilitates peptidomics by integrating the quantificative power of xcms with a range of stand alone peptide identification algorithms as well as providing analysis in an integrated framework.
 License: GPL (>= 2)
 LazyLoad: yes
-Depends: methods, Rcpp, pcaMethods, rJava, xlsx
-Imports: ggplot2, grid, gridExtra, reshape2, plyr, xcms, CAMERA, ggdendro, MSnbase, OutlierD, pcaPP, RColorBrewer, Biostrings, caret
+Depends: methods, Rcpp, rJava, xlsx
+Imports: ggplot2, grid, gridExtra, reshape2, plyr, xcms, CAMERA, ggdendro, MSnbase, OutlierD, pcaPP, RColorBrewer, Biostrings, caret, pcaMethods
 Collate: zzz.R generics.R low_level.R PepID.R Parameters.R Complist.R wrapper.R xcms.R QC.R pepCalc.R

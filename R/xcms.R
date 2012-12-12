@@ -29,7 +29,7 @@ setMethod(
 		}
         p <- p + theme_bw(base_size=10) + xlab('\nm/z') + ylab('Intensity')
         if(!missing(pepseq)){
-            p <- p + opts(title=parse(text=fragExp(pepseq)))
+            p <- p + ggtitle(parse(text=fragExp(pepseq)))
             ionlab <- data.frame(data, ion=NA)
             ionlist <- fragPattern(pepseq)
             for(i in 1:nrow(ionlist)){

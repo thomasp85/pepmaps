@@ -8,11 +8,9 @@ setClass(
         Peak.info='data.frame',
         annotation='list',
         parameters='Parameters',
-        peakID='data.frame',
         IDindex='list',
         pepID='PepID',
         xcmsSet='xcmsSet',
-        outlier='list',
         models='list',
         filter='list'
     ),
@@ -23,13 +21,11 @@ setClass(
         Peak.info=data.frame(),
         annotation=list(),
         parameters=parameters(),
-        peakID=data.frame(),
         IDindex=list(),
         pepID=pepID(),
         xcmsSet=new(Class='xcmsSet'),
-        outlier=list(),
         models=list(),
-        filter=list()
+        filter=list(Peaks=c(), Peptides=c(), Samples=c())
     ),
     validity=function(object){
         if(length(object@raw) != 0){
@@ -52,15 +48,10 @@ setMethod(
             cat('An empty Complist object\n')
 		
 		# Test if identification has been performed
-		} else if(length(object@peakID) == 0){
+		} else {
             cat('A Complist object with', nrow(object@Sample.info), 'samples and', nrow(object@Peak.info),'peak groups\n\n')
-            cat('No ID performed yet\n')
-        } else{
-            cat('A Complist object with', nrow(object@Sample.info), 'samples and', nrow(object@Peak.info),'peak groups\n\n')
-            cat('Peak identification available for:\n')
-            for(i in 1:ncol(object@peakID)){
-                cat('\t', names(object@peakID)[i],':\t', count(object@peakID[,i])[2,2], ' matches\n', sep='')
-            }
+            cat('\t', sum(object@filter$Peptides$Matched), ' peptides matched to ', sum(object@filter$Peaks$Matched), ' peaks\n\n', sep='')
+			cat('\t', sum(apply(object@filter$Peptides[,c('Matched', 'FDR')], 1, all)), ' matched peptides with FDR cutoff of ', object@pepID@FDR, '\n', sep='')
         }
     }
 )
@@ -68,9 +59,9 @@ setMethod(
 ### Creates a correlation matrix plot for samples in the Complist object
 setMethod(
     'plot', 'Complist',
-    function(x, method='pearson', peptides=TRUE){
-        if(peptides){
-            ggCorr(x@raw[x@peakID$Peptides,], method=method)
+    function(x, method='pearson', unmatched=FALSE){
+        if(!unmatched){
+            ggCorr(x@raw[x@filter$Peaks$Matched,], method=method)
         } else {
             ggCorr(x@raw, method=method)
         }
@@ -103,7 +94,7 @@ setMethod(
 setMethod(
     'length', 'Complist',
     function(x){
-        if(sum(length(x@raw)+length(x@Sample.info)+length(x@Peak.info)+length(x@annotation)+length(x@parameters)+length(x@peakID)+length(x@IDindex)+length(x@pepID)) == 0){
+        if(sum(length(x@raw)+length(x@Sample.info)+length(x@Peak.info)+length(x@annotation)+length(x@parameters)+length(x@IDindex)+length(x@pepID)) == 0){
             0
         } else {
             1
@@ -114,7 +105,7 @@ setMethod(
 ### Extract consensus matrix for the samples in either height or area
 setMethod(
     'getRaw', 'Complist',
-    function(object, outlier.rm=TRUE, mix.rm=TRUE, filter=NULL, unmatched=TRUE, height=FALSE, normalize=FALSE){
+    function(object, outlier.rm=TRUE, mix.rm=TRUE, filter=NULL, unmatched=FALSE, FDR=TRUE, height=FALSE, normalize=FALSE){
 		
 		# Extract data in the right format
         if(height){
@@ -125,7 +116,7 @@ setMethod(
 		
 		# Subsetting of data to match input
         row.names(ans) <- 1:nrow(ans)
-        remR <- getRemove(object, 'Peak', outlier=outlier.rm, filter=filter, IDs=names(object@peakID))
+        remR <- getRemove(object, 'Peak', outlier=outlier.rm, filter=filter, match=!unmatched, FDR=FDR)
         remC <- getRemove(object, 'Sample', outlier=outlier.rm, mix=mix.rm)
         if(length(remR) != 0){
             ans <- ans[-remR,]
@@ -172,9 +163,9 @@ setMethod(
 ### Extracts the list of peptides stored in the PepID slot
 setMethod(
     'getPeplist', 'Complist',
-    function(object, outlier.rm=TRUE, unmatched=TRUE){
+    function(object, outlier.rm=TRUE, unmatched=FALSE, FDR=TRUE, filter=NULL){
         ans <- object@pepID@peplist
-        rem <- getRemove(object, 'Peptide', outlier=outlier.rm, match=!unmatched)
+        rem <- getRemove(object, 'Peptide', outlier=outlier.rm, match=!unmatched, FDR=FDR, filter=filter)
         if(length(rem) != 0){
             ans <- ans[-rem,]
         } else {}
@@ -185,9 +176,9 @@ setMethod(
 ### Extract information on the peaks in the consensus matrix matched to peptides
 setMethod(
     'getPeakinfo', 'Complist',
-    function(object, outlier.rm=TRUE, filter=NULL, unmatched=TRUE){
+    function(object, outlier.rm=TRUE, filter=NULL, unmatched=FALSE, FDR=TRUE){
         ans <- object@Peak.info
-        rem <- getRemove(object, 'Peak', outlier=outlier.rm, filter=filter, IDs=names(object@peakID))
+        rem <- getRemove(object, 'Peak', outlier=outlier.rm, filter=filter, match=!unmatched, FDR=FDR)
         if(length(rem) != 0){
             ans <- ans[-rem,]
         } else {}
@@ -207,16 +198,19 @@ setMethod(
 ### Creates a list with indexes for matches between peaks and compounds. The format is decided with the from parameter
 setMethod(
 	'getPepPeakIndex', 'Complist',
-	function(object, from, outlier.rm=TRUE){
+	function(object, from, outlier.rm=TRUE, FDR=TRUE){
 		if(from == 'Peak'){
 			
 			# Get vector with peak ID's
-			if(outlier.rm){
-				ind <- unique(unlist(object@IDindex[!object@outlier$Peptide]))
-				ind <- ind[which(!object@outlier$Peak[ind])]
+			rem <- getRemove(object, 'Peptide', outlier=outlier.rm, match=TRUE, FDR=FDR)
+			if(length(rem) != 0){
+				ind <- object@IDindex[-rem]
 			} else {
-				ind <- unique(unlist(object@IDindex))
+				ind <- object@IDindex
 			}
+			ind <- do.call('c', ind)
+			ind <- ind[!ind %in% which(object@filter$Peaks$Outlier)]
+			ind <- unique(ind)
 			
 			# Create a list with an element for each peak ID holding the index of the matched peptide
 			k <- rep(seq_along(object@IDindex), sapply(object@IDindex, length))
@@ -227,14 +221,12 @@ setMethod(
 		} else if(from == 'Peptide'){
 			
 			# Trimming of the already available list in the object
-			if(outlier.rm){
-				ans <- object@IDindex[!object@outlier$Peptide]
-				pout <- which(object@outlier$Peak)
-				ans <- lapply(ans, function(x) x[!x %in% pout])
+			rem <- getRemove(object, 'Peptide', outlier=outlier.rm, FDR=FDR, match=TRUE)
+			if(length(rem) != 0){
+				ans <- object@IDindex[-rem]
 			} else {
 				ans <- object@IDindex
 			}
-			ans <- ans[!sapply(ans, length) == 0]
 			ans
 		} else {
 			stop('Wrong input: from must be either \'Peak\' or \'Peptide\'')
@@ -245,11 +237,12 @@ setMethod(
 ### Calculates the best match for all matched peaks in the consensus matrix
 setMethod(
     'getBestmatch', 'Complist',
-    function(object, outlier.rm=TRUE, filter=NULL){
-		ID <- getPepPeakIndex(object, from='Peak', outlier.rm=outlier.rm)
+    function(object, outlier.rm=TRUE, filter=NULL, FDR=TRUE){
+		ID <- getPepPeakIndex(object, from='Peak', outlier.rm=outlier.rm, FDR=FDR)
 		ID <- lapply(ID, function(x) selectMatch(object@pepID@peplist[x, ], IDtype=object@pepID@type))
-		if(!is.null(filter)){
-			ID <- ID[names(ID) %in% rownames(getPeakinfo)[object@filter[[filter]]]]
+		rem <- getRemove(object, 'Peak', filter=filter)
+		if(length(rem) != 0){
+			ID <- ID[!names(ID) %in% as.character(rem)]
 		}
         ID <- do.call('rbind', ID)
         ID
@@ -293,7 +286,7 @@ setMethod(
                     } else {}
 					
 					# Get outlier status and intensity
-                    tmp$Outlier <- object@outlier$Peak[ans[j]]
+                    tmp$Outlier <- object@filter$Peaks$Outlier[ans[j]]
                     tmp$Signal <- object@raw[ans[j],]
 					
                     info[[j]] <- tmp
@@ -432,10 +425,11 @@ setMethod(
         } else {}
         newSinfo <- sampleInfo(object, outlier.rm=FALSE, mix.rm=FALSE)
         newSinfo <- newSinfo[,-which(names(newSinfo) %in% c('Class', 'Filepath')), drop=FALSE]
+		pepID <- rescalePeplist(basename(xset@filepaths), xset@rt, object@pepID)
         rtwin <- object@parameters@parameters$Complist$rtwin
         mzwin <- object@parameters@parameters$Complist$mzwin
 		chrom <- object@chromatograms
-		object <- complist(xset, newSinfo, object@parameters, object@pepID, rtwin=rtwin, mzwin=mzwin)
+		object <- complist(xset, newSinfo, object@parameters, pepID, rtwin=rtwin, mzwin=mzwin)
         cat('Models, filters and outlier information have been cleared...\n')
 		object@chromatograms <- chrom
 		object@parameters <- editPar(object@parameters, type='retcor', ...)
@@ -447,29 +441,39 @@ setMethod(
 setMethod(
     'reMatch', 'Complist',
     function(object, rtwin, mzwin){
-        peakID <- data.frame(matrix(FALSE, nrow=nrow(object@Peak.info), ncol=1))
-        names(peakID) <- c('Peptides')
-        pep.index <- vector('list', nrow(object@pepID@peplist))
+        peakID <- rep(FALSE, nrow(object@filter$Peaks))
+        pep.index <- vector('list', nrow(object@filter$Peptides))
         for(i in 1:length(pep.index)){
             ind <- which(object@Peak.info$mzmin < (object@pepID@peplist$mz[i]+mzwin) & object@Peak.info$mzmax > (object@pepID@peplist$mz[i]-mzwin) & object@Peak.info$rtmin < (object@pepID@peplist$Retention.time[i]+rtwin) & object@Peak.info$rtmax > (object@pepID@peplist$Retention.time[i]-rtwin))
             if(length(ind) > 0){
-                peakID[ind, 1] <- TRUE
+                peakID[ind] <- TRUE
                 pep.index[[i]] <- ind
             } else {}
         }
-        object@peakID <- peakID
+        object@filter$Peaks$Matched <- peakID
+		object@filter$Peptides$Matched <- !sapply(pep.index, is.null)
         object@IDindex <- pep.index
-        object@outlier$Peptide[] <- FALSE
-        outlierID <- which(object@outlier$Peak)
+        object@filter$Peptides$Outlier[] <- FALSE
+        outlierID <- which(object@filter$Peaks$Outlier)
         index <- which(sapply(object@IDindex, function(x) sum(x %in% outlierID)) > 0)
         if(length(index) > 0){
             index <- unlist(index)
-            object@outlier$Peptide[index] <- TRUE
+            object@filter$Peptides$Outlier[index] <- TRUE
         } else {}
         cat('Peptide outliers set according to peak outliers...\n')
         object@parameters <- editPar(object@parameters, type='Complist', rtwin=rtwin, mzwin=mzwin)
         object
     }
+)
+### reSetFDR
+### Sets a new FDR cutoff value and filters the identifications
+setMethod(
+	'reSetFDR', 'Complist',
+	function(object, FDR){
+		object@pepID@FDR <- FDR
+		object@filter$Peptides$FDR <- object@pepID@peplist$FDR < FDR
+		object
+	}
 )
 ### findOutlier
 ### Performs an outlier detection based on the type (Sample, Feature, Peptide)
@@ -535,8 +539,9 @@ setMethod(
                 if(nrow(lab) != 0){
                     p <- p + geom_text(data=lab, aes(x=Sample, y=Dist, label=Sample), hjust=-0.1, vjust=0, size=2.5)
                 } else {}
-                p <- p + opts(axis.text.x=theme_text(angle=-45, hjust=0, vjust=1, size=8))
-                p
+                p <- p + theme(axis.text.x=element_text(angle=-45, hjust=0, vjust=1, size=8))
+                print(p)
+				invisible(lab$Sample)
             } else {}
         } else if(what == 'Peak'){
 			
@@ -600,7 +605,7 @@ setMethod(
                 stop('No samples called:', paste(ID, collapes=', '))
             } else {}
             index <- which(row.names(object@Sample.info) %in% ID)
-            object@outlier$Sample[index] <- value
+            object@filter$Samples$Outlier[index] <- value
 			
 		# Peaks
         } else if(what == 'Peak'){
@@ -609,14 +614,14 @@ setMethod(
             if(max(ID) > nrow(object@Peak.info)){
                 stop('ID must be between 1 and', nrow(object@Peak.info))
             } else {}
-            object@outlier$Peak[ID] <- value
+            object@filter$Peaks$Outlier[ID] <- value
 			
 			# Flag matched peptides as outliers too
             if(recursive){
                 index <- which(sapply(object@IDindex, function(x) sum(x %in% ID)) > 0)
                 if(length(index) > 0){
                     index <- unlist(index)
-                    object@outlier$Peptide[index] <- value
+                    object@filter$Peptides$Outlier[index] <- value
                 } else {}
             } else {}
 			
@@ -639,12 +644,12 @@ setMethod(
             } else {
                 index <- ID
             }
-            object@outlier$Peptide[index] <- value
+            object@filter$Peptides$Outlier[index] <- value
 			
 			# Flag matched peaks as outliers too
             if(recursive){
                 index <- unlist(object@IDindex[index])
-                object@outlier$Peak[index] <- value
+				object@filter$Peaks$Outlier[index] <- value
             } else {}
         } else {}
         object
@@ -655,22 +660,22 @@ setMethod(
 setMethod(
     'outlier', 'Complist',
     function(object){
-        if(sum(unlist(object@outlier)) == 0){
+        if(sum(c(object@filter$Samples$Outlier, object@filter$Peaks$Outlier, object@filter$Peptides$Outlier)) == 0){
             cat('No outliers flagged in Complist object...\n')
         } else {
-            if(sum(object@outlier$Sample) > 0){
+            if(sum(object@filter$Samples$Outlier) > 0){
                 cat('Samples:\n\n')
-                print(row.names(object@Sample.info[object@outlier$Sample,]))
-                cat('\n')
+                cat(row.names(object@Sample.info[object@filter$Samples$Outlier,]))
+                cat('\n\n')
             } else {}
-            if(sum(object@outlier$Peak) > 0){
+            if(sum(object@filter$Peaks$Outlier) > 0){
                 cat('Peak groups:\n\n')
-                print(object@Peak.info[object@outlier$Peak,])
+                print(object@Peak.info[object@filter$Peaks$Outlier,])
                 cat('\n')
             } else {}
-            if(sum(object@outlier$Peptide) > 0){
+            if(sum(object@filter$Peptides$Outlier) > 0){
             cat('Peptides:\n\n')
-            print(object@pepID@peplist[object@outlier$Peptide,])
+            print(object@pepID@peplist[object@filter$Peptides$Outlier,])
             }
         }
     }
@@ -757,12 +762,10 @@ setMethod(
 ### Returns the design matrix for the complist object
 setMethod(
     'sampleInfo', 'Complist',
-    function(object, outlier.rm=TRUE, mix.rm=TRUE, all){
-		if(!missing(all)){
-			if(all){
-				outlier.rm=FALSE
-				mix.rm=FALSE
-			}
+    function(object, outlier.rm=TRUE, mix.rm=TRUE, all=FALSE){
+		if(all){
+			outlier.rm=FALSE
+			mix.rm=FALSE
 		}
 		rem <- getRemove(object, what='Sample', outlier=outlier.rm, mix=mix.rm)
 		if(length(rem) != 0){
@@ -803,8 +806,8 @@ setMethod(
         } else {}
 		
         if(type == 'Peptide'){
-			if(any(ID %in% rownames(object@pepID@peplist)[object@outlier$Peptide])){
-				IDout <- ID[ID %in% rownames(object@pepID@peplist)[object@outlier$Peptide]]
+			if(any(ID %in% rownames(object@pepID@peplist)[object@filter$Peptides$Outlier])){
+				IDout <- ID[ID %in% rownames(object@pepID@peplist)[object@filter$Peptides$Outlier]]
 				cat(paste('Warning: ', paste(IDout, collapse=', '), ' marked as outliers\n', sep=''))
 			} else {}
 			if(any(!ID %in% object@pepID@peplist$Peptide.ID)){
@@ -825,7 +828,7 @@ setMethod(
                     windows[i,2:3] <- c(min(peps$rt)-5, max(peps$rt)+5)
                     windows[i,4:5] <- c(min(peps$Precursor)-0.5, max(peps$Precursor)+0.5)
                 } else {
-                    if(object@outlier$Peak[index]){
+                    if(object@filter$Peaks$Outlier[index]){
                         cat('Warning: Peak group matching Peptide.ID: <', ID[i], '> has been marked as outlier.\n\n', sep='')
                     } else {}
                     windows[i,1] <- ID[i]
@@ -840,8 +843,8 @@ setMethod(
 				IDout <- ID[ID < 1 | ID > nrow(object@raw)]
 				cat(paste('Warning: Invalid peak id for', paste(IDout, collapse=', '), '\n', sep=''))
 			} else {}
-			if(any(ID %in% which(object@outlier$Peak))){
-				IDout <- ID[ID %in% which(object@outlier$Peak)]
+			if(any(ID %in% which(object@filter$Peaks$Outlier))){
+				IDout <- ID[ID %in% which(object@filter$Peaks$Outlier)]
 				cat('Warning: ', paste(IDout, collapse=', '), ' marked as outliers\n', sep='')
 			} else {}
 			
@@ -925,8 +928,7 @@ setMethod(
 			retcor <- TRUE
 		}
         if(outlier.rm){
-            sOut <- Sample[!object@outlier$Sample[row.names(object@Sample.info) %in% Sample]]
-            if(length(Sample) == 0){
+            if(all(!Sample %in% sampleNames(object, outlier.rm=outlier.rm, mix.rm=mix.rm))){
                 stop('Provided samples marked as outlier')
             } else{}
         } else {}
@@ -995,7 +997,7 @@ setMethod(
             }
             pval <- apply(dat, 1, function(x, cov) anova(lm(x~cov))$'Pr(>F)'[1], cov=sampleInfo(object, outlier.rm=outlier.rm, mix.rm=TRUE)[, cov[i]])
             pval <- pval < p
-            object@filter[[cov[i]]] <- pval
+            object@filter$Peaks[,cov[i]] <- pval
         }
         object
     }
@@ -1005,10 +1007,10 @@ setMethod(
 setMethod(
 	'filterNZV', 'Complist',
 	function(object, freqCut=95/5, uniqueCut=10, outlier.rm=TRUE){
-		NZV <- nearZeroVar(t(object@raw[, which(!object@outlier$Sample)]), freqCut=freqCut, uniqueCut=uniqueCut)
+		NZV <- nearZeroVar(t(object@raw[, which(!object@filter$Samples$Outlier)]), freqCut=freqCut, uniqueCut=uniqueCut)
 		filter <- rep(TRUE, nrow(object@raw))
 		filter[NZV] <- FALSE
-		object@filter$NZV <- filter
+		object@filter$Peaks$NZV <- filter
 		object
 	}
 )
@@ -1028,14 +1030,18 @@ setMethod(
 ### Creates a PCA model based on the specification given in the parameters
 setMethod(
     'modelPCA', 'Complist',
-    function(object, name, outlier.rm=TRUE, mix.rm=TRUE, filter=NULL, method='nipals', nPcs=2, scale='uv', center=TRUE, cv='q2'){
+    function(object, name, outlier.rm=TRUE, mix.rm=TRUE, unmatched=FALSE, FDR=TRUE, filter=NULL, method='nipals', nPcs=2, scale='uv', center=TRUE, cv='q2'){
         
 		# Extract data
-		dat <- getRaw(object, outlier.rm=outlier.rm, mix.rm=mix.rm, filter=filter)
-        pInf <- getPeakinfo(object, outlier.rm=outlier.rm, filter=filter)
-        ID <- getBestmatch(object, outlier.rm=outlier.rm)
+		dat <- getRaw(object, outlier.rm=outlier.rm, mix.rm=mix.rm, filter=filter, FDR=FDR, unmatched=unmatched)
+        pInf <- getPeakinfo(object, outlier.rm=outlier.rm, filter=filter, FDR=FDR, unmatched=unmatched)
+        ID <- getBestmatch(object, outlier.rm=outlier.rm, FDR=FDR)
 		ID <- ID[which(rownames(ID) %in% rownames(pInf)), ]
-		ID <- cbind(pInf, ID)
+		newID <- data.frame(matrix(NA, nrow=nrow(pInf), ncol=ncol(ID)))
+		names(newID) <- names(ID)
+		ind <- match(rownames(pInf), rownames(ID))
+		newID[ind[!is.na(ind)],] <- ID
+		ID <- cbind(pInf, newID)
 		
 		# Create model
 		model <- pca(t(dat), method=method, nPcs=nPcs, scale=scale, center=center, cv=cv)
@@ -1048,10 +1054,10 @@ setMethod(
 ### Allows taping into the caret package's vast number of modelling tools
 setMethod(
 	'modelCaret', 'Complist',
-	function(object, method, name, predict, outlier.rm=TRUE, mix.rm=TRUE, filter=NULL, nTrain, preProcess=NULL, weights=NULL, trControl=trainControl(), tuneGrid=NULL, tuneLength=3, ...){
+	function(object, method, name, predict, outlier.rm=TRUE, mix.rm=TRUE, unmatched=FALSE, FDR=TRUE, filter=NULL, nTrain, preProcess=NULL, weights=NULL, trControl=trainControl(), tuneGrid=NULL, tuneLength=3, ...){
 		
 		# Extract Data
-		dat <- getRaw(object, outlier.rm=outlier.rm, mix.rm=mix.rm, filter=filter)
+		dat <- getRaw(object, outlier.rm=outlier.rm, mix.rm=mix.rm, filter=filter, unmatched=unmatched, FDR=FDR)
 		Y <- sampleInfo(object, outlier.rm=outlier.rm, mix.rm=mix.rm)[, predict]
 		if(!missing(nTrain)){
 			if(nTrain < 0 | nTrain > 1){
@@ -1064,8 +1070,8 @@ setMethod(
 		} else {
 			testset <- NULL
 		}
-		pInf <- getPeakinfo(object, outlier.rm=outlier.rm, filter=filter)
-		ID <- getBestmatch(object, outlier.rm=outlier.rm)
+		pInf <- getPeakinfo(object, outlier.rm=outlier.rm, filter=filter, unmatched=unmatched, FDR=FDR)
+		ID <- getBestmatch(object, outlier.rm=outlier.rm, filter=filter, FDR=FDR)
 		ID <- ID[which(rownames(ID) %in% rownames(pInf)), ]
 		ID <- cbind(pInf, ID)
 		
@@ -1314,7 +1320,7 @@ setMethod(
             } else {}
         } else {}
 	if(!missing(title)){
-            p <- p + opts(title=title)
+            p <- p + ggtitle(title)
         } else {}
         p
     }
@@ -1335,10 +1341,10 @@ setMethod(
             df$value <- c(mod@R2[1:nPcs], mod@R2cum[1:nPcs], mod@cvstat[1:nPcs])
             df$type <- rep(c('R2', 'R2cum', 'Q2'), each=nPcs)
             p <- ggplot(data=df, aes(x=factor(PC), y=value, fill=type)) + geom_histogram(position='dodge', colour=I('black')) + theme_bw()
-            p <- p + scale_x_discrete('\nPrincipal component', breaks= 1:nPcs, labels=names(mod@cvstat)[1:nPcs]) + scale_y_continuous('', limits=c(0,1)) + scale_fill_hue('Model statistic')
+            p <- p + scale_x_discrete('\nPrincipal component', breaks= 1:nPcs, labels=colnames(mod@scores)[1:nPcs]) + scale_y_continuous('', limits=c(0,1)) + scale_fill_hue('Model statistic')
         }
 		if(!missing(title)){
-            p <- p + opts(title=title)
+            p <- p + ggtitle(title)
         } else {}
         p
     }
@@ -1425,7 +1431,7 @@ setMethod(
             }
         }
         if(!missing(title)){
-            p <- p + opts(title=title)
+            p <- p + ggtitle(title)
         } else {}
 		p
     }
@@ -1434,10 +1440,10 @@ setMethod(
 ### Calculates a two dimensional MDS and creates a scatterplot
 setMethod(
 	'plotMDS', 'Complist',
-	function(object, outlier.rm=TRUE, mix.rm=TRUE, filter=NULL, scText, scPoint, scColour, scArea, scConnect, scHide, title){
+	function(object, outlier.rm=TRUE, mix.rm=TRUE, filter=NULL, unmatched=FALSE, FDR=TRUE, scText, scPoint, scColour, scArea, scConnect, scHide, title){
 		
 		# Calculates data
-		raw <- getRaw(object, outlier.rm=outlier.rm, mix.rm=mix.rm, filter=filter)
+		raw <- getRaw(object, outlier.rm=outlier.rm, mix.rm=mix.rm, filter=filter, unmatched=unmatched, FDR=FDR)
 		scaled <- apply(raw, 2, scale)
 		mds <- cmdscale(dist(t(scaled)), eig=TRUE)
 		explained <- round(c(mds$eig[1]/sum(mds$eig)*100, mds$eig[2]/sum(mds$eig)*100))
@@ -1539,7 +1545,7 @@ setMethod(
 		}
 		p <- p + xlab(paste('Eig%: ', explained[1], sep='')) + ylab(paste('Eig%: ', explained[2], sep='')) + theme_bw()
 		if(!missing(title)){
-			p <- p + opts(title=title)
+			p <- p + ggtitle(title)
 		} else {}
 		p		
 	}
@@ -1610,7 +1616,7 @@ setMethod(
 			} else {}
 			
 			# Creates plot
-            p <- ggplot(data=res, aes(x=variable, y=value)) + theme_bw() + opts(axis.text.x = theme_text(size=8, angle=90, hjust=1, vjust=0.5))
+            p <- ggplot(data=res, aes(x=variable, y=value)) + theme_bw() + theme(axis.text.x = element_text(size=8, angle=90, hjust=1, vjust=0.5))
             p <- p + xlab('') + ylab('')
             if(continuousVar){
                 p <- p + geom_area(fill=I('grey'))
@@ -1625,11 +1631,11 @@ setMethod(
                 } else {
                     p <- p + geom_bar(fill=I('grey'))
                 }
-				p <- p + opts(panel.grid.major=theme_blank(), panel.grid.minor=theme_blank())
+				p <- p + theme(panel.grid.major=element_blank(), panel.grid.minor=element_blank())
             }
         } else {}
         if(!missing(title)){
-            p <- p + opts(title=title)
+            p <- p + ggtitle(title)
         } else {}
         p
     }
@@ -1699,7 +1705,7 @@ setMethod(
             } else {}
 			
 			# Create plot
-            p <- ggplot(data=data, aes(x=variable, y=value)) + theme_bw() + opts(axis.text.x = theme_text(size=8, angle=90, hjust=1, vjust=0.5))
+            p <- ggplot(data=data, aes(x=variable, y=value)) + theme_bw() + theme(axis.text.x = element_text(size=8, angle=90, hjust=1, vjust=0.5))
             if(continuousVar){
                 if(mean){
                     p <- p + geom_line(aes(linetype=group)) + geom_area(data=avg, aes(fill=fill), alpha=I(0.5))
@@ -1724,11 +1730,11 @@ setMethod(
                 if(!mean){
                     p <- p + facet_wrap(~Sample)
                 } else {}
-				p <- p + opts(panel.grid.major=theme_blank(), panel.grid.minor=theme_blank())
+				p <- p + theme(panel.grid.major=element_blank(), panel.grid.minor=element_blank())
             }
             p <- p + xlab('') + ylab('')
             if(!missing(title)){
-                p <- p + opts(title=title)
+                p <- p + ggtitle(title)
             } else {}
         } else {}
         p
@@ -1738,13 +1744,13 @@ setMethod(
 ### Creates a dendrogram plot with optional factor info in a facet below
 setMethod(
     'plotDendro', 'Complist',
-    function(object, model, compound, title, method='ward', distance='euclidean', outlier.rm=TRUE, mix.rm=TRUE, what, factor, cutHeight, cutGroup, filter=NULL){
+    function(object, model, compound, title, method='ward', distance='euclidean', outlier.rm=TRUE, mix.rm=TRUE, unmatched=FALSE, FDR=TRUE, what, factor, cutHeight, cutGroup, filter=NULL){
         if(missing(model)){
 			
 			# Extract data
-            data <- getRaw(object, outlier.rm=outlier.rm, mix.rm=mix.rm, filter=filter)
-			pInf <- getPeakinfo(object, outlier.rm=outlier.rm, filter=filter)
-			ID <- getBestmatch(object, outlier.rm=outlier.rm)
+            data <- getRaw(object, outlier.rm=outlier.rm, mix.rm=mix.rm, filter=filter, unmatched=unmatched, FDR=FDR)
+			pInf <- getPeakinfo(object, outlier.rm=outlier.rm, filter=filter, unmatched=unmatched, FDR=FDR)
+			ID <- getBestmatch(object, outlier.rm=outlier.rm, FDR=FDR)
 			ID <- ID[which(rownames(ID) %in% rownames(pInf)), ]
 			ID <- cbind(pInf, ID)
             if(what == 'Sample'){
@@ -1916,10 +1922,10 @@ setMethod(
             p <- p + facet_grid(plot~., scales='free', height=c(4,1))
             p <- p + scale_y_continuous(breaks=c(fac[[2]]$y, seq(0, max(den$segments$y), by=inter(max(den$segments$y)))), labels=c(as.character(fac[[2]]$Levels), as.character(seq(0, max(den$segments$y), by=inter(max(den$segments$y))))))
         }
-        p <- p + scale_x_continuous(breaks=den$label$x, labels=den$label$label) + opts(axis.text.x=theme_text(angle=-90, hjust=0))
-        p <- p + xlab('') + ylab('') + opts(legend.position='none')
+        p <- p + scale_x_continuous(breaks=den$label$x, labels=den$label$label) + theme(axis.text.x=element_text(angle=-90, hjust=0))
+        p <- p + xlab('') + ylab('') + theme(legend.position='none')
         if(!missing(title)){
-            p <- p + opts(title=title)
+            p <- p + ggtitle(title)
         } else {}
         p
     }
@@ -1928,7 +1934,7 @@ setMethod(
 ### Creates a heatplot based on ggHeat().
 setMethod(
     'plotHeat', 'Complist',
-    function(object, pep.info, sample.info, sample.name, outlier.rm=TRUE, mix.rm=TRUE, filter=NULL, ...){
+    function(object, pep.info, sample.info, sample.name, outlier.rm=TRUE, mix.rm=TRUE, filter=NULL, FDR=TRUE, ...){
 		
 		# Input check
         if(!missing(pep.info)){
@@ -1938,18 +1944,19 @@ setMethod(
         } else {}
         if(!missing(sample.info)){
             if(sum(!sample.info %in% names(object@Sample.info)) != 0){
-                stop('Unknown colfactor(s). Specify names found in the peplist...')
+                stop('Unknown colfactor(s). Specify names found in the sampleInfo...')
             } else {}
         } else {}
 		
 		# Creates data
-		dat <- getRaw(object, outlier.rm=outlier.rm, mix.rm=mix.rm, filter=filter)
+		dat <- getRaw(object, outlier.rm=outlier.rm, mix.rm=mix.rm, filter=filter, FDR=FDR)
 		if(!missing(sample.name)){
 			colnames(dat) <- as.vector(sampleInfo(object, outlier.rm=outlier.rm, mix.rm=mix.rm)[, sample.name])
 		} else {}
         int <- t(scale(t(dat), center=F, scale=apply(dat, 1, max)))*100
+		int[is.na(int)] <- 0
         if(!missing(pep.info)){
-            rinf <- getBestmatch(object, outlier.rm=outlier.rm, filter=filter)
+            rinf <- getBestmatch(object, outlier.rm=outlier.rm, filter=filter, FDR=FDR)
             rinf <- rinf[,pep.info, drop=FALSE]
         } else {}
         if(!missing(sample.info)){
@@ -1977,21 +1984,21 @@ setMethod(
 ### Plots the coverage of the proteins in the database
 setMethod(
 	'plotCoverage', 'Complist',
-	function(object, Sample, outlier.rm=TRUE, mix.rm=TRUE, filter=NULL, useFDR=FALSE, protein, poswin, anova){
+	function(object, Sample, outlier.rm=TRUE, mix.rm=TRUE, filter=NULL, FDR=TRUE, useFDR=FALSE, protein, poswin, anova){
 		if(missing(protein)){
 			protein <- names(object@pepID@database)
 		} else {}
 		if(missing(Sample)){
 			if(missing(anova)){
-				raw <- data.frame(getBestmatch(object, outlier.rm=outlier.rm, filter=filter))
+				raw <- data.frame(getBestmatch(object, outlier.rm=outlier.rm, filter=filter, FDR=FDR))
 			} else {
 				factor <- sampleInfo(object, outlier.rm=outlier.rm, mix.rm=mix.rm)[, anova]
-				response <- as.list(data.frame(t(getRaw(object, outlier.rm=outlier.rm, mix.rm=mix.rm))))
+				response <- as.list(data.frame(t(getRaw(object, outlier.rm=outlier.rm, mix.rm=mix.rm, unmatched=FALSE, FDR=FDR))))
 				aov <- mapply(function(factor, response) anova(lm(response~factor))[['Pr(>F)']][1], response=response, MoreArgs=list(factor=factor))
-				raw <- data.frame(getBestmatch(object, outlier.rm=outlier.rm, filter=filter), aov=aov)
+				raw <- data.frame(getBestmatch(object, outlier.rm=outlier.rm, filter=filter, FDR=FDR), aov=aov)
 			}
 		} else {
-			raw <- data.frame(getBestmatch(object, outlier.rm=outlier.rm, filter=filter), intensity=getRaw(object, outlier.rm=outlier.rm, filter=filter, normalize=T)[, Sample])
+			raw <- data.frame(getBestmatch(object, outlier.rm=outlier.rm, filter=filter, FDR=FDR), intensity=getRaw(object, outlier.rm=outlier.rm, filter=filter, FDR=FDR, unmatched=FALSE, normalize=T)[, Sample])
 		}
 		raw <- raw[which(raw$Protein %in% protein), ]
 		ambig <- which(grepl('[0-9]/[0-9]', raw$Peptide.name))
@@ -2041,7 +2048,7 @@ setMethod(
 		}
 		p <- ggplot(data=raw)
 		p <- p + geom_text(data=seq, aes(x=x, y=y, label=res), colour='grey60', fontface=2, size=seqScale, hjust=0.5, vjust=0.5)
-		if(useFDR){
+		if(useFDR & !FDR){
 			p <- p + geom_text(data=seq1, aes(x=x, y=y, label=res, alpha=FDR), colour='red', fontface=2, size=seqScale, hjust=0.5, vjust=0.5, show_guide=FALSE)
 			if(missing(Sample)){
 				if(missing(anova)){
@@ -2197,8 +2204,8 @@ setMethod(
 				p <- p + scale_shape('', solid=FALSE, labels='Precursors')
 			} else {}
 			p <- p + scale_x_continuous(expand=c(0.05, 0)) + scale_y_continuous(expand=c(0.05, 0))
-			p <- p + theme_bw() + opts(strip.background=theme_blank(), strip.text.x=theme_blank(), strip.text.y=theme_blank())
-			p <- p + opts(axis.text.x=theme_text(size=5, angle=315, hjust=0, vjust=1), axis.text.y=theme_text(size=5))
+			p <- p + theme_bw() + theme(strip.background=element_blank(), strip.text=element_blank())
+			p <- p + theme(axis.text.x=element_text(size=5, angle=315, hjust=0, vjust=1), axis.text.y=element_text(size=5))
 			p
 		}
 	}
@@ -2207,7 +2214,7 @@ setMethod(
 ### Plots the selected chromatograms in overlay and optionally labels the top intensity peptides
 setMethod(
     'plotChromatogram', 'Complist',
-    function(object, Sample, retcor, type, colour, outlier.rm, mix.rm, rtwin, title, nPeptides){
+    function(object, Sample, retcor, type, colour, outlier.rm, mix.rm, filter=NULL, FDR=TRUE, rtwin, title, nPeptides){
 		
 		# Remember name of object in case extracted chromatograms must be assigned
 		objectname <- deparse(substitute(object))
@@ -2252,38 +2259,33 @@ setMethod(
 		if(!missing(nPeptides)){
 			
 			# Find top peaks
-			raw <- getRaw(object, outlier.rm = outlier.rm, mix.rm = mix.rm)
-			peakInfo <- getPeakinfo(object, outlier.rm = outlier.rm)
+			raw <- getRaw(object, outlier.rm = outlier.rm, mix.rm = mix.rm, filter=filter, unmatched=FALSE, FDR=FDR)
+			peakInfo <- getPeakinfo(object, outlier.rm = outlier.rm, filter=filter, unmatched=FALSE, FDR=FDR)
+			pepInfo <- getBestmatch(object, outlier.rm = outlier.rm, filter=filter, FDR=FDR)
 			raw <- raw[, which(colnames(raw) %in% Sample)]
 			if (!missing(rtwin)) {
 				ind <- which(peakInfo$rtmin > rtwin[1] & peakInfo$rtmax < rtwin[2])
 				peakInfo <- peakInfo[ind, ]
 				raw <- raw[ind, ]
+				pepInfo <- pepInfo[ind, ]
 			} else {}
 			if (length(Sample) > 1) {
 				raw <- apply(raw, 1, max)
 			} else {}
 			peakInfo <- peakInfo[order(raw, decreasing = TRUE), ]
+			pepInfo <- pepInfo[order(raw, decreasing = TRUE), ]
 			raw <- raw[order(raw, decreasing = TRUE)]
 			
-			# Find top peaks with matched peptides
-			pep <- getBestmatch(object, outlier.rm = outlier.rm)
-			i <- 1
-			j <- 1
-			pepMatch <- list()
-			while (i <= nPeptides) {
-				if (names(raw)[j] %in% rownames(pep)) {
-					pepMatch[[i]] <- pep[names(raw)[j], ]
-					i <- i + 1
-				} else {}
-				j <- j + 1
-			}
-			pepMatch <- do.call('rbind', pepMatch)
-			peakInfo <- peakInfo[rownames(pepMatch),]
-			raw <- raw[rownames(pepMatch)]
+			if(nPeptides > nrow(pepInfo)){
+				nPeptides <- nrow(pepInfo)
+				cat('Only ', nPeptides, ' peptides in plotregion\n', sep='')
+			} else {}
+			peakInfo <- peakInfo[1:nPeptides, ]
+			pepInfo <- pepInfo[1:nPeptides, ]
+			raw <- raw[1:nPeptides]
 			
 			# Create annotation data
-			annotateTIC <- cbind(pepMatch, peakInfo, raw)
+			annotateTIC <- cbind(pepInfo, peakInfo, raw)
 			annotateTIC$Intensity <- NA
 			annotateBPC <- annotateTIC
 			annotateTIC$Type <- 'TIC'
@@ -2295,7 +2297,7 @@ setMethod(
 				subset <- chroms[which(chroms$Type == 'BPC' & chroms$Time > annotateBPC[i, 'rtmed'] - window & chroms$Time < annotateBPC[i, 'rtmed'] + window), ]
 				annotateBPC[i, 'Intensity'] <- max(subset$Intensity)
 			}
-			pretty <- annotateTIC[, c('Peptide.ID', 'Peptide.name', 'Sequence')]
+			pretty <- annotateTIC[, c('Peptide.ID', 'Peptide.name', 'Sequence', 'FDR')]
 			pretty <- pretty[order(pretty$Peptide.ID), ]
 			annotate <- rbind(annotateTIC, annotateBPC)
 			annotate <- annotate[which(annotate$Type %in% type), ]
@@ -2314,7 +2316,7 @@ setMethod(
             p <- p + coord_cartesian(xlim=rtwin)
         } else {}
         if(!missing(title)){
-            p <- p + opts(title=title)
+            p <- p + ggtitle(title)
         } else {}
 		if(!missing(nPeptides)){
 			p <- p + geom_text(data = annotate, aes(x = rtmed, y = Intensity, group = NULL, colour = NULL, label = Peptide.ID), size=3, vjust=-0.5, show_guide=FALSE)
@@ -2322,6 +2324,26 @@ setMethod(
 		}
         p
     }
+)
+### plotDetection
+### Plots EICs on common scale for high quality peptide identification and splits them whether on whether the peak has been detected
+setMethod(
+	'plotDetection', 'Complist',
+	function(object){
+		peptides <- getPeplist(object, FDR=TRUE, unmatched=TRUE)
+		eics <- getEIC(object@xcmsSet, mzrange=matrix(c(peptides$mz-0.1, peptides$mz+0.1), ncol=2), rtrange=matrix(c(peptides$Retention.time-10, peptides$Retention.time+10), ncol=2), sampleidx=sampnames(object@xcmsSet), rt='corrected')
+		data <- list()
+		for(i in 1:length(eics@eic[[1]])){
+			TMPdata <- adply(1:length(eics@eic), 1, function(x, eic, name) data.frame(Sample=name[x], eic[[x]][[i]]), eic=eics@eic, name=names(eics@eic))
+			TMPdata[, 'Peak'] <- as.character(i)
+			data[[i]] <- TMPdata
+		}
+		data <- do.call('rbind', data)
+		data$Sample.Peak <- paste(data$Sample, ': ', data$Peak, sep='')
+		data$Matched <- rep(FALSE, nrow(data))
+		data$Matched[which(data$Peak %in% as.character(which(peptides$Peptide.ID %in% getPeplist(object, FDR=TRUE, unmatched=FALSE)$Peptide.ID)))] <- TRUE
+		qplot(rt, intensity, data=data, geom='line', colour=Peak, group=Sample.Peak) + theme_bw() + guides(colour='none') + facet_grid(Matched~.)
+	}
 )
 ### plotRetcor
 ### Plots deviation profile, before and after views of the chromatograms to evaluate the effect of the retention time correction
@@ -2376,10 +2398,10 @@ setMethod(
         p <- p + geom_line() + facet_grid(Type~., scales='free', height=c(1,2,2))
         p <- p + theme_bw()
         if(!missing(rtwin)){
-            p <- p + coord_cartesian(xlim=rtwin, wise=TRUE)
+            p <- p + coord_cartesian(xlim=rtwin)
         } else {}
         if(!missing(title)){
-            p <- p + opts(title=title)
+            p <- p + ggtitle(title)
         } else {}
         p
     }
@@ -2449,43 +2471,49 @@ setMethod(
 ### Extract index of samples, peptides or peaks to remove given a set of filterering options
 setMethod(
     'getRemove', 'Complist',
-    function(object, what, outlier=FALSE, mix=FALSE, filter, IDs, match=FALSE, annotation=FALSE, index){
+    function(object, what, outlier=FALSE, mix=FALSE, filter, match=FALSE, annotation=FALSE, index, FDR=FALSE){
 		
 		# For Samples
         if(what == 'Sample'){
             ans <- list()
             if(outlier){
-                ans$o <- object@outlier$Sample
+                ans$o <- object@filter$Samples$Outlier
             } else {}
 			if(mix){
-				if('Master.mix' %in% names(object@Sample.info)){
-					ans$m <- object@Sample.info$Master.mix
-				} else {}
+				ans$m <- object@filter$Samples$Mix
 			}
             if(!missing(index)){
                 ans$i2 <- rep(FALSE, nrow(object@Sample.info))
-                ans$i2[index] <- TRUE
+				if(is.numeric(index)){
+					ans$i2[index] <- TRUE
+				} else {
+					ans$i2[index %in% sampleNames(object)] <- TRUE
+				}
             } else {}
             ans <- do.call('cbind', ans)
             if(!is.null(ans)){
                 ans <- apply(ans, 1, any)
                 ans <- which(ans)
             } else {
-                ans <- numeric()
+                ans <- integer()
             }
 		
 		# For peaks
         } else if(what == 'Peak'){
             ans <- list()
             if(outlier){
-                ans$o <- object@outlier$Peak
+                ans$o <- object@filter$Peaks$Outlier
             } else {}
             if(!missing(filter)){
-                ans$f <- do.call('cbind', object@filter[which(names(object@filter) %in% filter)])
+                ans$f <- object@filter$Peaks[,which(names(object@filter$Peaks) %in% filter)]
             } else {}
-            if(!missing(IDs)){
-                ans$i <- !object@peakID[, which(names(object@peakID) %in% IDs)]
+            if(match){
+                ans$m <- !object@filter$Peaks$Matched
             } else {}
+			if(FDR){
+				ans$f2 <- rep(TRUE, nrow(object@raw))
+				ans$f2[do.call('c', object@IDindex[object@filter$Peptides$FDR])] <- FALSE
+			} else {}
             if(annotation){
                 ans$a <- laply(object@annotation$Features, length) == 0
             } else {}
@@ -2498,28 +2526,34 @@ setMethod(
                 ans <- apply(ans, 1, any)
                 ans <- which(ans)
             } else {
-                ans <- numeric()
+                ans <- integer()
             }
 			
 		# For peptides
         } else if(what == 'Peptide'){
             ans <- list()
             if(outlier){
-                ans$o <- object@outlier$Peptide
+                ans$o <- object@filter$Peptides$Outlier
             } else {}
             if(match){
-                ans$m <- laply(object@IDindex, is.null)
+                ans$m <- !object@filter$Peptides$Matched
             } else {}
             if(!missing(index)){
-                ans$i2 <- rep(FALSE, nrow(object@pepID@peplist))
+                ans$i2 <- rep(FALSE, nrow(object@filter$Peptides))
                 ans$i2[index] <- TRUE
             } else {}
+			if(!missing(filter)){
+				ans$f <- object@filter$Peptides[,which(names(object@filter$Peptides) %in% filter)]
+			} else {}
+			if(FDR){
+				ans$f2 <- !object@filter$Peptides$FDR
+			}
             ans <- do.call('cbind', ans)
             if(!is.null(ans)){
                 ans <- apply(ans, 1, any)
                 ans <- which(ans)
             } else {
-                ans <- numeric()
+                ans <- integer()
             }
         } else {
             stop('Unknown input <', what, '>\n', sep='')
@@ -2531,11 +2565,11 @@ setMethod(
 ### Extract intensity (normalized by default) and id for matches and writes the result to csv files
 setMethod(
 	'intensityReport', 'Complist',
-	function(object, folder=NULL, outlier.rm=TRUE, mix.rm=TRUE, normalize=TRUE){
+	function(object, folder=NULL, outlier.rm=TRUE, mix.rm=TRUE, unmatched=FALSE, FDR=TRUE, normalize=TRUE, height=FALSE){
 		
 		# Extracts data
-		dat <- getRaw(object, outlier.rm=outlier.rm, mix.rm=mix.rm, normalize=normalize)
-		ID <- getPepPeakIndex(object, from='Peak', outlier.rm=outlier.rm)
+		dat <- getRaw(object, outlier.rm=outlier.rm, mix.rm=mix.rm, unmatched=unmatched, FDR=FDR, normalize=normalize, height=height)
+		ID <- getPepPeakIndex(object, from='Peak', outlier.rm=outlier.rm, FDR=FDR)
 		ID <- lapply(ID, function(x) object@pepID@peplist[x, ])
 			
 		# Formatting for xlsx files
@@ -2562,7 +2596,7 @@ setMethod(
 ### Creates a pdf file with EICs for all peaks identified as peptides
 setMethod(
 	'peakReport', 'Complist',
-	function(object, folder=NULL, outlier.rm=TRUE, mix.rm=TRUE, group=NULL, retcor=TRUE){
+	function(object, folder=NULL, outlier.rm=TRUE, mix.rm=TRUE, FDR=TRUE, group=NULL, retcor=TRUE){
 		if(retcor){
 			rt <- 'corrected'
 		} else {
@@ -2575,17 +2609,14 @@ setMethod(
 			filename <- file.path(folder, 'Peakplot.pdf')
 		}
 		
-		ID <- which(!sapply(object@IDindex, is.null))
+		peptides <- getPeplist(object, outlier.rm=outlier.rm, unmatched=FALSE, FDR=FDR)
+		peaks <- object@Peak.info[do.call('c', object@IDindex[as.numeric(rownames(peptides))]),]
+		peptides <- peptides[rep(1:nrow(peptides), sapply(object@IDindex[as.numeric(rownames(peptides))], length)), ]
 			
-		# Get rt mz window for all EIC's
-		windows <- data.frame(matrix(NA, ncol=5, nrow=length(ID)))
-		for(i in 1:length(ID)){
-			index <- object@IDindex[[ID[i]]]
-			windows[i,1] <- getPeplist(object)$Peptide.ID[ID[i]]
-			windows[i,2:3] <- c(object@Peak.info$rtmin[index]-5, object@Peak.info$rtmax[index]+5)
-			windows[i, 4:5] <- c(object@Peak.info$mzmin[index], object@Peak.info$mzmax[index])
-		}
-		colnames(windows) <- c('ID', 'rtmin', 'rtmax', 'mzmin', 'mzmax')
+		windows <- data.frame(peptides$Peptide.ID, peaks[, c('rtmin', 'rtmax', 'mzmin', 'mzmax')])
+		windows[, 2] <- windows[, 2] - 5
+		windows[, 3] <- windows[, 3] + 5
+		names(windows) <- c('ID', 'rtmin', 'rtmax', 'mzmin', 'mzmax')
 		
 		# Extract EIC's
 		cat('Extracting EIC for all samples...\n\n')
@@ -2611,12 +2642,12 @@ setMethod(
 		# Creating pdf
 		cat('\nPlotting...\n')
 		flush.console()
-		subs <- split(ID, rep(1:ceiling(length(ID)/12), each=12)[1:length(ID)])
+		subs <- split(unique(ans$Peak.ID), rep(1:ceiling(length(unique(ans$Peak.ID))/12), each=12)[1:length(unique(ans$Peak.ID))])
 		pdf(filename, width=9, height=12)
 		for(i in 1:length(subs)){
 			subdat <- subset(ans, ans[,1] %in% subs[[i]])
 			p <- ggplot(data=subdat, aes(x=rt, y=intensity, group=Sample)) + facet_wrap(~Peak.ID, scales='free', ncol=3, nrow=4)
-			p <- p + theme_bw() + xlab('Retention time (sec)') + ylab('Intensity') + opts(title='Extracted Ion Chromatograms for all\nmatched peptides.\n')
+			p <- p + theme_bw() + xlab('Retention time (sec)') + ylab('Intensity') + ggtitle('Extracted Ion Chromatograms for all\nmatched peptides.\n')
 			if(is.null(group)){
 				p <- p + geom_line()
 			} else {
@@ -2632,10 +2663,10 @@ setMethod(
 ### Creates a 2-page pdf with a simple PCA model
 setMethod(
 	'pcaReport', 'Complist',
-	function(object, folder=NULL, outlier.rm=TRUE, mix.rm=TRUE, group=NULL, alpha=0.95){
+	function(object, folder=NULL, outlier.rm=TRUE, mix.rm=TRUE, unmatched=FALSE, FDR=TRUE, filter=NULL, group=NULL, alpha=0.95){
 		
 		# Create model
-		object <- modelPCA(object, 'PCA', outlier.rm=outlier.rm, mix.rm=mix.rm, nPcs=10)
+		object <- modelPCA(object, 'PCA', outlier.rm=outlier.rm, mix.rm=mix.rm, unmatched=unmatched, FDR=FDR, filter=filter, nPcs=10)
 		
 		# Setting filename
 		if(is.null(folder)){
@@ -2653,7 +2684,7 @@ setMethod(
 			score1 <- plotScore(object, 'PCA', 'Scoreplot for PC1 and PC2', 1, 2, scText='Sample', scColour=group, alpha=alpha)
 			score2 <- plotScore(object, 'PCA', 'Scoreplot for PC3 and PC4', 3, 4, scText='Sample', scColour=group, alpha=alpha)
 		}
-		scoregrid <- plotmatrix(as.data.frame(object@models$PCA$Model@scores)) + theme_bw() + opts(title='Overview of the 10 first PCs')
+		scoregrid <- plotmatrix(as.data.frame(object@models$PCA$Model@scores)) + theme_bw() + ggtitle('Overview of the 10 first PCs')
 		stat <- plotStat(object, 'PCA', 'Statistics for the model')
 		
 		# Creating pdf
@@ -2671,7 +2702,7 @@ setMethod(
 	}
 )
 ### sampleReport
-### Creates a pdf file with coverage plots for each sample
+### Creates a pdf file with sample plots for each sample
 setMethod(
 		'sampleReport', 'Complist',
 		function(object, folder=NULL, outlier.rm=TRUE, mix.rm=TRUE, precursors=FALSE, chrom='TIC', spec='sum'){
@@ -2687,7 +2718,7 @@ setMethod(
 			pdf(filename, height=9, width=12)
 			for(i in 1:length(samples)){
 				p <- plotSample(object, samples[i], chrom=chrom, spec=spec, precursors=precursors)
-				p <- p + opts(title=paste('Raw data overview of ', samples[i], sep=''))
+				p <- p + ggtitle(paste('Raw data overview of ', samples[i], sep=''))
 				print(p)
 			}
 			invisible(dev.off())
@@ -2697,7 +2728,7 @@ setMethod(
 ### Creates a pdf file with coverage plots for each sample
 setMethod(
 	'coverageReport', 'Complist',
-	function(object, folder=NULL, outlier.rm=TRUE, mix.rm=TRUE, useFDR=FALSE, anova){
+	function(object, folder=NULL, outlier.rm=TRUE, mix.rm=TRUE, FDR=TRUE, useFDR=FALSE, anova){
 		if(!missing(anova)){
 			if(is.null(folder)){
 				filename <- 'Coverage_anova.pdf'
@@ -2707,7 +2738,7 @@ setMethod(
 			}
 			pdf(filename, height=12, width=9)
 			for(i in 1:length(anova)){
-				p <- plotCoverage(object, outlier.rm=outlier.rm, mix.rm=mix.rm, useFDR=useFDR, anova=anova[i])
+				p <- plotCoverage(object, outlier.rm=outlier.rm, mix.rm=mix.rm, FDR=FDR, useFDR=useFDR, anova=anova[i])
 				print(p)
 			}
 		} else {
@@ -2722,8 +2753,8 @@ setMethod(
 			# Create plot
 			pdf(filename, height=12, width=9)
 			for(i in 1:length(samples)){
-				p <- plotCoverage(object, samples[i], outlier.rm=outlier.rm, useFDR=useFDR)
-				p <- p + opts(title=paste('Protein coverage for ', samples[i], sep=''))
+				p <- plotCoverage(object, samples[i], outlier.rm=outlier.rm, FDR=FDR, useFDR=useFDR)
+				p <- p + ggtitle(paste('Protein coverage for ', samples[i], sep=''))
 				print(p)
 			}
 		}
@@ -2762,7 +2793,7 @@ setMethod(
 			sname <- unique(chrom$Sample)[i]
 			schrom <- subset(chrom, chrom$Sample == sname)
 			p <- ggplot(data=schrom, aes(x=Time, y=Intensity, group=Sample)) + facet_grid(Type~., scales='free')
-			p <- p + geom_line() + theme_bw() + opts(title=paste('MS chromatograms for sample:', sname, sep=' ')) + xlab('Retention time (sec)')
+			p <- p + geom_line() + theme_bw() + ggtitle(paste('MS chromatograms for sample:', sname, sep=' ')) + xlab('Retention time (sec)')
 			print(p)
 		}
 		invisible(dev.off())
@@ -2813,6 +2844,35 @@ setMethod(
 			} else {}
 		}
 	}
+)
+### mixReport
+### Creates a 2-page pdf with a simple PCA model
+setMethod(
+		'mixReport', 'Complist',
+		function(object, outlier.rm=TRUE, unmatched=TRUE, FDR=FALSE, alpha=0.95){
+			
+			# Create model
+			mod <- modelPCA(object, 'PCA', outlier.rm=outlier.rm, mix.rm=FALSE, unmatched=unmatched, FDR=FDR, nPcs=4)@models[['PCA']]$Model
+			
+			sco <- as.data.frame(mod@scores)[,1:4]
+			
+			info <- sampleInfo(object, outlier.rm=outlier.rm, mix.rm=FALSE)
+			sco1 <- sco[!info$Master.mix, ]
+			sco2 <- sco[info$Master.mix, ]
+			sco1 <- data.frame(Sample=rep(rownames(info)[!info$Master.mix], 2), plot=rep(c('PC1 vs PC2', 'PC3 vs PC4'), each=nrow(sco1)), x=c(sco1[,1], sco1[,3]), y=c(sco1[,2], sco1[,4]))
+			sco2 <- data.frame(Sample=rep(rownames(info)[info$Master.mix], 2), plot=rep(c('PC1 vs PC2', 'PC3 vs PC4'), each=nrow(sco2)), x=c(sco2[,1], sco2[,3]), y=c(sco2[,2], sco2[,4]))
+			
+			int <- pepmaps:::simconf(sco, alpha)
+			angle <- seq(-pi, pi, length = 50)
+			df <- data.frame(co1 = sin(angle)*int[1,2], co2 = cos(angle)*int[2,2], co3 = sin(angle)*int[3,2], co4 = cos(angle)*int[4,2])
+			df <- data.frame(plot=rep(c('PC1 vs PC2', 'PC3 vs PC4'), each=nrow(df)), x=c(df[,1], df[,3]), y=c(df[,2], df[,4]))
+			
+			p <- ggplot(data=sco1, aes(x=x, y=y)) + theme_bw()
+			p <- p + geom_point(colour=I('grey')) + geom_text(aes(label=Sample), data=sco2, size=3)
+			p <- p + geom_path(data=df, colour=I('red'), linetype=I(2))
+			p <- p + facet_wrap(~plot, ncol=2, scales='free') + xlab('') + ylab('')
+			p
+		}
 )
 ### updateComplist
 ### Updates a Complist object created in an earlier version
@@ -2869,24 +2929,22 @@ complist <- function(data, Sample.info, para, PepID, rtwin=0, mzwin=0){
 		
 		# In case no PepID object is provided
         if(missing(PepID)){
-            peakID <- data.frame()
             pep.index <- list()
             PepID <- pepID()
-            outlier <- list(Sample=rep(FALSE, nrow(sinfo)), Peak=rep(FALSE, nrow(peak.info)))
+			filter=list()
 		
 		# Creates link between ID and peakgroups
         } else {
-            peakID <- data.frame(matrix(FALSE, nrow=nrow(peak.info), ncol=1))
-            names(peakID) <- c('Peptides')
+            peakID <- rep(FALSE, nrow(peak.info))
             pep.index <- vector('list', nrow(PepID@peplist))
             for(i in 1:nrow(PepID@peplist)){
                 ind <- which(peak.info$mzmin < (PepID@peplist$mz[i]+mzwin) & peak.info$mzmax > (PepID@peplist$mz[i]-mzwin) & peak.info$rtmin < (PepID@peplist$Retention.time[i]+rtwin) & peak.info$rtmax > (PepID@peplist$Retention.time[i]-rtwin))
                 if(length(ind) > 0){
-                    peakID[ind, 1] <- TRUE
+                    peakID[ind] <- TRUE
                     pep.index[[i]] <- ind
                 } else {}
             }
-            outlier <- list(Sample=rep(FALSE, nrow(sinfo)), Peak=rep(FALSE, nrow(peak.info)), Peptide=rep(FALSE, nrow(PepID@peplist)))
+			filter <- list(Peaks=data.frame(Outlier=FALSE, Matched=peakID), Peptides=data.frame(Outlier=FALSE, FDR=PepID@peplist$FDR < PepID@FDR, Matched=!sapply(pep.index, is.null)), Samples=data.frame(Outlier=FALSE, Mix=Sample.info$Master.mix))
         }
 		
 		# Creates object
@@ -2896,14 +2954,12 @@ complist <- function(data, Sample.info, para, PepID, rtwin=0, mzwin=0){
             Sample.info=sinfo,
             Peak.info=peak.info,
             annotation=annotation,
-            peakID=peakID,
             IDindex=pep.index,
             pepID=PepID,
             parameters=para,
             xcmsSet=pdata,
-            outlier=outlier,
             models=list(),
-            filter=list()
+            filter=filter
         )
     }
 }
