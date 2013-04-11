@@ -43,16 +43,24 @@ fragExp <- function(pepseq){
 }
 ### pepMass
 ### create synthetic fragmentation pattern
-pepMass <- function(pepseq, mono=FALSE){
+pepMass <- function(pepseq, mono=FALSE, neutral=FALSE){
 	AAtable <- getAAtable()
 	pepseq <- toupper(pepseq)
 	if(!(sum(strsplit(pepseq, '')[[1]] %in% AAtable$Code1)==nchar(pepseq))){
 		stop('Invalid peptide sequence.')
 	} else {}
 	if(mono){
-		mass <- sapply(pepseq, function(x) sum(AAtable$Mono[match(strsplit(x, '')[[1]], AAtable$Code1)], na.rm=FALSE) + 18.01056)
+		if(neutral){
+			mass <- sapply(pepseq, function(x) sum(AAtable$Mono[match(strsplit(x, '')[[1]], AAtable$Code1)], na.rm=FALSE))
+		} else {
+			mass <- sapply(pepseq, function(x) sum(AAtable$Mono[match(strsplit(x, '')[[1]], AAtable$Code1)], na.rm=FALSE) + 18.01056)
+		}
 	} else {
-		mass <- sapply(pepseq, function(x) sum(AAtable$Avg[match(strsplit(x, '')[[1]], AAtable$Code1)], na.rm=FALSE) + 18.02)
+		if(neutral){
+			mass <- sapply(pepseq, function(x) sum(AAtable$Avg[match(strsplit(x, '')[[1]], AAtable$Code1)], na.rm=FALSE))
+		} else {
+			mass <- sapply(pepseq, function(x) sum(AAtable$Avg[match(strsplit(x, '')[[1]], AAtable$Code1)], na.rm=FALSE) + 18.02)
+		}
 	}
 	mass
 }
@@ -99,23 +107,57 @@ peppI <- function(pepseq){
 }
 ### fragPattern
 ### Calculate the theoretical fragmentation pattern by CID for a peptide
-fragPattern <- function(pepseq){
+fragPattern <- function(pepseq, ions='aby', neutralLosses=TRUE){
 	AAtable <- pepmaps:::getAAtable()
+	ions <- strsplit(ions, '')[[1]]
 	pepseq <- toupper(pepseq)
 	if(!(sum(strsplit(pepseq, '')[[1]] %in% AAtable$Code1)==nchar(pepseq))){
 		stop('Invalid peptide sequence.')
 	} else {}
 	pepseq <- strsplit(pepseq,'')[[1]]
-	bion <- data.frame(ion=paste('b', 1:(length(pepseq)-1), sep=''), mz=NA, stringsAsFactors=FALSE)
-	yion <- data.frame(ion=paste('y', 1:(length(pepseq)-1), sep=''), mz=NA, stringsAsFactors=FALSE)
-	for(i in 1:(length(pepseq))-1){
-		bionseq <- paste(pepseq[1:i], collapse='')
-		bionmz <- pepMass(bionseq)+1.0078250-18.01057
-		bion$mz[i] <- bionmz
-		yionseq <- paste(pepseq[(length(pepseq)+1-i):length(pepseq)], collapse='')
-		yionmz <- pepMass(yionseq)+1.0078250
-		yion$mz[i] <- yionmz
+	bion <- data.frame(ion=c(paste('b', 1:(length(pepseq)-1), sep=''), paste('b*', 1:(length(pepseq)-1), sep=''), paste('b\u00BA', 1:(length(pepseq)-1), sep='')), mz=NA, stringsAsFactors=FALSE)
+	yion <- data.frame(ion=c(paste('y', 1:(length(pepseq)-1), sep=''), paste('y*', 1:(length(pepseq)-1), sep=''), paste('y\u00BA', 1:(length(pepseq)-1), sep='')), mz=NA, stringsAsFactors=FALSE)
+	aion <- data.frame(ion=c(paste('a', 1:(length(pepseq)-1), sep=''), paste('a*', 1:(length(pepseq)-1), sep=''), paste('a\u00BA', 1:(length(pepseq)-1), sep='')), mz=NA, stringsAsFactors=FALSE)
+	zion <- data.frame(ion=c(paste('z', 1:(length(pepseq)-1), sep=''), paste('z*', 1:(length(pepseq)-1), sep=''), paste('z\u00BA', 1:(length(pepseq)-1), sep='')), mz=NA, stringsAsFactors=FALSE)
+	cion <- data.frame(ion=c(paste('c', 1:(length(pepseq)-1), sep=''), paste('c*', 1:(length(pepseq)-1), sep=''), paste('c\u00BA', 1:(length(pepseq)-1), sep='')), mz=NA, stringsAsFactors=FALSE)
+	xion <- data.frame(ion=c(paste('x', 1:(length(pepseq)-1), sep=''), paste('x*', 1:(length(pepseq)-1), sep=''), paste('x\u00BA', 1:(length(pepseq)-1), sep='')), mz=NA, stringsAsFactors=FALSE)
+	for(i in 1:(length(pepseq)-1)){
+		abcionseq <- paste(pepseq[1:i], collapse='')
+		abcMass <- pepMass(abcionseq, mono=TRUE, neutral=TRUE)
+		if('b' %in% ions) bion$mz[i] <- abcMass+2*1.0078250 - 1.007850
+		if('a' %in% ions) aion$mz[i] <- abcMass+2*1.0078250 - 29.00273
+		if('c' %in% ions) cion$mz[i] <- abcMass+2*1.0078250 + 16.01872
+		if(neutralLosses){
+			if(any(c('R', 'K', 'N', 'Q') %in% strsplit(abcionseq, '')[[1]])){
+				if('b' %in% ions) bion$mz[i+length(pepseq)-1] <- bion$mz[i] - 17.02654
+				if('a' %in% ions) aion$mz[i+length(pepseq)-1] <- aion$mz[i] - 17.02654
+				if('c' %in% ions) cion$mz[i+length(pepseq)-1] <- cion$mz[i] - 17.02654
+			} else {}
+			if(any(c('S', 'T', 'E', 'D') %in% strsplit(abcionseq, '')[[1]])){
+				if('b' %in% ions) bion$mz[i+2*(length(pepseq)-1)] <- bion$mz[i] - 18.01056
+				if('a' %in% ions) aion$mz[i+2*(length(pepseq)-1)] <- aion$mz[i] - 18.01056
+				if('c' %in% ions) cion$mz[i+2*(length(pepseq)-1)] <- cion$mz[i] - 18.01056
+			} else {}
+		}
+		xyzionseq <- paste(pepseq[(length(pepseq)+1-i):length(pepseq)], collapse='')
+		xyzMass <- pepMass(xyzionseq, mono=TRUE, neutral=TRUE)
+		if('y' %in% ions) yion$mz[i] <- xyzMass+18.01056 + 1.0078250
+		if('x' %in% ions) xion$mz[i] <- xyzMass+18.01056 + 27.99491 - 1.0078250
+		if('z' %in% ions) zion$mz[i] <- xyzMass+18.01056 - 16.01872
+		if(neutralLosses){
+			if(any(c('R', 'K', 'N', 'Q') %in% strsplit(xyzionseq, '')[[1]])){
+				if('y' %in% ions) yion$mz[i+length(pepseq)-1] <- yion$mz[i] - 17.02654
+				if('x' %in% ions) xion$mz[i+length(pepseq)-1] <- xion$mz[i] - 17.02654
+				if('z' %in% ions) zion$mz[i+length(pepseq)-1] <- zion$mz[i] - 17.02654
+			} else {}
+			if(any(c('S', 'T', 'E', 'D') %in% strsplit(xyzionseq, '')[[1]])){
+				if('y' %in% ions) yion$mz[i+2*(length(pepseq)-1)] <- yion$mz[i] - 18.01056
+				if('x' %in% ions) xion$mz[i+2*(length(pepseq)-1)] <- xion$mz[i] - 18.01056
+				if('z' %in% ions) zion$mz[i+2*(length(pepseq)-1)] <- zion$mz[i] - 18.01056
+			} else {}
+		}
 	}
-	ans <- rbind(bion, yion)
+	ans <- rbind(aion, bion, cion, xion, yion, zion)
+	ans <- ans[-which(sapply(ans$mz, is.na)), ]
 	ans
 }

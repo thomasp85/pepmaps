@@ -140,7 +140,7 @@ setMethod(
 		# Extract the data from the peplist
         for(i in 1:length(ID)){
             index <- which(sapply(object@IDindex, function(x, id) id %in% x, id=as.numeric(ID[i])))
-            ans[[i]] <- getPeplist(object, outlier.rm=FALSE, unmatched=TRUE)[index,]
+            ans[[i]] <- getPeplist(object, outlier.rm=FALSE, unmatched=TRUE, FDR=FALSE)[index,]
         }
 		
 		# Create feedback data (nomatch feedback)
@@ -208,7 +208,7 @@ setMethod(
 			} else {
 				ind <- object@IDindex
 			}
-			ind <- do.call('c', ind)
+			ind <- unlist(ind)
 			ind <- ind[!ind %in% which(object@filter$Peaks$Outlier)]
 			ind <- unique(ind)
 			
@@ -1340,7 +1340,7 @@ setMethod(
             df$PC <- rep(1:nPcs, 3)
             df$value <- c(mod@R2[1:nPcs], mod@R2cum[1:nPcs], mod@cvstat[1:nPcs])
             df$type <- rep(c('R2', 'R2cum', 'Q2'), each=nPcs)
-            p <- ggplot(data=df, aes(x=factor(PC), y=value, fill=type)) + geom_histogram(position='dodge', colour=I('black')) + theme_bw()
+            p <- ggplot(data=df, aes(x=factor(PC), y=value, fill=type)) + geom_histogram(position='dodge', colour=I('black'), stat='identity') + theme_bw()
             p <- p + scale_x_discrete('\nPrincipal component', breaks= 1:nPcs, labels=colnames(mod@scores)[1:nPcs]) + scale_y_continuous('', limits=c(0,1)) + scale_fill_hue('Model statistic')
         }
 		if(!missing(title)){
@@ -1622,14 +1622,14 @@ setMethod(
                 p <- p + geom_area(fill=I('grey'))
             } else {
                 if(!missing(loColour)){
-                    p <- p + geom_bar(aes(fill=Colour))
+                    p <- p + geom_bar(aes(fill=Colour), stat='identity')
                     if(is.numeric(res$Colour)){
                         p <- p + scale_fill_gradient(loColour)
                     } else {
                         p <- p + scale_fill_hue(loColour)
                     }
                 } else {
-                    p <- p + geom_bar(fill=I('grey'))
+                    p <- p + geom_bar(fill=I('grey'), stat='identity')
                 }
 				p <- p + theme(panel.grid.major=element_blank(), panel.grid.minor=element_blank())
             }
@@ -1715,14 +1715,14 @@ setMethod(
                 }
             } else {
                 if(!missing(loColour)){
-                    p <- p + geom_bar(aes(fill=Colour), position='dodge')
+                    p <- p + geom_bar(aes(fill=Colour), position='dodge', stat='identity')
                     if(is.numeric(data$Colour)){
                         p <- p + scale_fill_gradient(loColour)
                     } else {
                         p <- p + scale_fill_hue(loColour)
                     }
                 } else {
-                    p <- p + geom_bar(fill='grey')
+                    p <- p + geom_bar(fill='grey', stat='identity')
                 }
                 p <- p + geom_point(data=avg, aes(shape=fill))
                 p <- p + geom_linerange(data=avg, aes(ymin=zero, ymax=value))
@@ -1986,7 +1986,7 @@ setMethod(
 	'plotCoverage', 'Complist',
 	function(object, Sample, outlier.rm=TRUE, mix.rm=TRUE, filter=NULL, FDR=TRUE, useFDR=FALSE, protein, poswin, anova){
 		if(missing(protein)){
-			protein <- names(object@pepID@database)
+			protein <- sapply(strsplit(names(object@pepID@database), ' '), function(x) x[1])
 		} else {}
 		if(missing(Sample)){
 			if(missing(anova)){
@@ -2020,7 +2020,7 @@ setMethod(
 		protein <- unique(raw$Protein)
 		seq <- list()
 		for(i in 1:length(protein)){
-			res <- strsplit(as.character(object@pepID@database[which(names(object@pepID@database) %in% protein[i])]), '')[[1]]
+			res <- strsplit(as.character(object@pepID@database[which(sapply(strsplit(names(object@pepID@database), ' '), function(x) x[1]) %in% protein[i])]), '')[[1]]
 			present <- as.vector(unlist((mapply('seq', raw$start[raw$Protein==protein[i]]+0.5, raw$end[raw$Protein==protein[i]]-0.5))))
 			posFDR <- present
 			for(j in 1:length(posFDR)){
@@ -2214,7 +2214,7 @@ setMethod(
 ### Plots the selected chromatograms in overlay and optionally labels the top intensity peptides
 setMethod(
     'plotChromatogram', 'Complist',
-    function(object, Sample, retcor, type, colour, outlier.rm, mix.rm, filter=NULL, FDR=TRUE, rtwin, title, nPeptides){
+    function(object, Sample, retcor, type, colour, outlier.rm, mix.rm, filter, FDR, rtwin, title, nPeptides){
 		
 		# Remember name of object in case extracted chromatograms must be assigned
 		objectname <- deparse(substitute(object))
@@ -2234,7 +2234,13 @@ setMethod(
 		} else {}
 		if(missing(colour)){
 			colour <- NULL
-		}
+		} else {}
+		if(missing(filter)){
+			filter <- NULL
+		} else {}
+		if(missing(FDR)){
+			FDR <- TRUE
+		} else {}
 		
 		# Extract chromatograms
 		if(missing(Sample)){
@@ -2651,7 +2657,11 @@ setMethod(
 			if(is.null(group)){
 				p <- p + geom_line()
 			} else {
-				p <- p + geom_line(aes(colour=Group)) + scale_colour_hue(group)
+				if(is.numeric(sampleInfo(object, all=T)[,group])){
+					p <- p + geom_line(aes(colour=Group)) + scale_colour_gradient(group)
+				} else {
+					p <- p + geom_line(aes(colour=Group)) + scale_colour_hue(group)
+				}
 			}
 			gc()
 			print(p)
@@ -2807,7 +2817,7 @@ setMethod(
 		for(i in 1:length(group)){
 			if(names(group)[i] == 'Rows'){
 				data <- data.frame(Group = group[[i]], Peak = as.numeric(names(group[[i]])))
-				data <- dlply(data, .(Group), function(x) getMatch(object, ID=x$Peak))
+				data <- dlply(data, .(Group), function(x) getMatch(object, ID=x$Peak, bestmatch=TRUE))
 				wb <- createWorkbook()
 				filename <- paste(names(group)[i], '.xlsx', sep='')
 				if(!missing(folder)){

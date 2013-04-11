@@ -9,6 +9,10 @@ Version history
 - Solved bug requiring the strict use of useML=TRUE in createComplist
 - Fixed bug that would erroneous warn about datafile mismatch when using cache=TRUE in createComplist
 - Added result cache for each file in collateMSGFplus
+- Bug fixes in peakReport to allow continuous variable in group parameter
+- Bug fixes til allow fasta files with description in header
+- cPep moved outside initialize and rescalePeplist function
+- Fixed a bug where groupReport would list all possible matches instead of the 'right' one
 
 ### 1.6
 - Added mixReport to create a PCA plot showing the position of master mixes

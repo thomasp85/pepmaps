@@ -389,6 +389,27 @@ findName <- function(x, name){
     } else {}
     ans
 }
+## Helperfunction for PepID and rescalePeplist
+cPep <- function(x, database, FDR){
+	seq <- strsplit(as.character(x$Peptide[1]), '.', fixed=T)[[1]][2]
+	seq <- gsub('\\+([\\d]|,)+', '', seq, perl=TRUE)
+	ind <- gregexpr(seq, as.character(database[sapply(strsplit(names(database), ' '), function(x) x[1]) == x$Protein[1]]))[[1]]
+	name <- paste(x$Protein[1], ' (', paste(ind, collapse='/'), '-', paste(ind + attr(ind, 'match.length') - 1, collapse='/'), ')', sep='')
+	if(sum(x$QValue < FDR) != 0){
+		best <- which(x$QValue < FDR)
+		rt <- median(x$rt[best])
+		mz <- median(x$Precursor[best])
+	} else {
+		rt <- median(x$rt)
+		mz <- median(x$Precursor)
+	}
+	mass <- pepMass(seq, mono=TRUE)
+	m.err <- mean(x$'PrecursorError(Da)')
+	prot <- x$Protein[1]
+	fdr <- min(x$QValue)
+	sample.coverage <- length(unique(x$SpecFile))
+	data.frame(name, seq, rt, mz, mass, m.err, prot, fdr, sample.coverage)
+}
 ## Rescales retention time for ID's based on rt correction in MS1 level
 rescalePeplist <- function(files, rtcorrection, pepID){
 	raw <- pepID@raw
@@ -401,30 +422,10 @@ rescalePeplist <- function(files, rtcorrection, pepID){
 	}
 	raw$rt <- newRT
 	
-	cPep <- function(x){
-		seq <- strsplit(as.character(x$Peptide[1]), '.', fixed=T)[[1]][2]
-		seq <- gsub('\\+([\\d]|,)+', '', seq, perl=TRUE)
-		ind <- gregexpr(seq, as.character(pepID@database[names(pepID@database) == x$Protein[1]]))[[1]]
-		name <- paste(x$Protein[1], ' (', paste(ind, collapse='/'), '-', paste(ind + attr(ind, 'match.length') - 1, collapse='/'), ')', sep='')
-		if(sum(x$QValue < 0.01) != 0){
-			best <- which(x$QValue < 0.01)
-			rt <- median(x$rt[best])
-			mz <- median(x$Precursor[best])
-		} else {
-			rt <- median(x$rt)
-			mz <- median(x$Precursor)
-		}
-		mass <- pepMass(seq, mono=TRUE)
-		m.err <- mean(x$'PrecursorError(Da)')
-		prot <- x$Protein[1]
-		fdr <- min(x$QValue)
-		data.frame(name, seq, rt, mz, mass, m.err, prot, fdr)
-	}
-	
-	peplist <- ddply(raw, .(Peptide.ID, Charge), cPep)
-	names(peplist) <- c('Peptide.ID', 'Charge', 'Peptide.name', 'Sequence', 'Retention.time', 'mz', 'Mass', 'Mass.error', 'Protein', 'FDR')
+	peplist <- ddply(raw, .(Peptide.ID, Charge), cPep, database=pepID@database, FDR=pepID@FDR)
+	names(peplist) <- c('Peptide.ID', 'Charge', 'Peptide.name', 'Sequence', 'Retention.time', 'mz', 'Mass', 'Mass.error', 'Protein', 'FDR', 'Sample.coverage')
 	peplist$Peptide.ID <- paste(peplist$Peptide.ID, '_', peplist$Charge, sep='')
-	pepID@peplist <- peplist
+	pepID@peplist <- data.frame(peplist, Qval(as.character(peplist$Sequence)), Length=nchar(as.character(peplist$Sequence)))
 	pepID
 }
 ## convert using msconvert
@@ -957,7 +958,7 @@ ggHeat <- function(data, colfactor, rowfactor, cGroup, rGroup, cOrder, rOrder, h
 				if(colfac[[i]][[1]]$type[1] == 'seq'){
 					dat <- data.frame(x=1:9, y=1, fill=1:9)
 					l <- qplot(x, y, data=dat, geom='tile', fill=factor(fill))
-					l <- l + scale_fill_brewer(colfacname[i], breaks=1:9, labels=c(min(do.call('rbind', colfac[[i]])$value), rep('', 7), max(do.call('rbind', colfac[[i]])$value)), palette=colfac[[i]][[1]]$Palet[1], guide=guide_legend(nrow=9))
+					l <- l + scale_fill_brewer(colfacname[i], breaks=1:9, labels=c(sprintf('%.4g', min(do.call('rbind', colfac[[i]])$value)), rep('', 7), sprintf('%.4g', max(do.call('rbind', colfac[[i]])$value))), palette=colfac[[i]][[1]]$Palet[1], guide=guide_legend(nrow=9))
 					l <- l + theme(legend.position='top', legend.direction='vertical')
 					if(version == '0.8.9'){
 						l <- l + opts(keep='legend_box', legend.position='left')
@@ -997,7 +998,7 @@ ggHeat <- function(data, colfactor, rowfactor, cGroup, rGroup, cOrder, rOrder, h
 				if(rowfac[[i]][[1]]$type[1] == 'seq'){
 					dat <- data.frame(x=1:9, y=1, fill=1:9)
 					l <- qplot(x, y, data=dat, geom='tile', fill=factor(fill))
-					l <- l + scale_fill_brewer(rowfacname[i], breaks=1:9, labels=c(min(do.call('rbind', rowfac[[i]])$value), rep('', 7), max(do.call('rbind', rowfac[[i]])$value)), palette=rowfac[[i]][[1]]$Palet[1], guide=guide_legend(nrow=9))
+					l <- l + scale_fill_brewer(rowfacname[i], breaks=1:9, labels=c(sprintf('%.4g', min(do.call('rbind', rowfac[[i]])$value)), rep('', 7), sprintf('%.4g', max(do.call('rbind', rowfac[[i]])$value))), palette=rowfac[[i]][[1]]$Palet[1], guide=guide_legend(nrow=9))
 					l <- l + theme(legend.position='top', legend.direction='vertical')
 					if(version == '0.8.9'){
 						l <- l + opts(keep='legend_box', legend.position='left')

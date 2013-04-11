@@ -159,7 +159,7 @@ pepReport <- function(object, group=NULL, folder=NULL, outlier.rm=TRUE, mix.rm=T
     if(outlier.rm){
         out <- row.names(object@Sample.info)[object@filter$Samples$Outlier]
         if(length(out) > 0){
-            cat('\nOutlier samples removed:', paste(out, collapse=', ', '\n', sep=' '))
+            cat('\nOutlier samples removed:', paste(out, collapse=', '), '\n', sep=' ')
         } else {}
     } else {}
 }

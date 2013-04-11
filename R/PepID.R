@@ -37,6 +37,9 @@ setMethod(
         } else {
             .Object@type <- type
             .Object@raw <- raw
+			if(any(table(sapply(strsplit(names(database), ' '), function(x) x[1])) > 1)){
+				stop('Non-unique protein names in database')
+			} else {}
 			.Object@database <- database
 			.Object@FDR <- FDR
             if(type == 'MassAI'){
@@ -63,27 +66,8 @@ setMethod(
             } else if(type == 'MSGF+'){
 				.Object@nsample <- length(unique(raw$SpecFile))
 				.Object@npep <- length(unique(raw$Peptide.ID))
-				cPep <- function(x){
-					seq <- strsplit(as.character(x$Peptide[1]), '.', fixed=T)[[1]][2]
-					seq <- gsub('\\+([\\d]|,)+', '', seq, perl=TRUE)
-					ind <- gregexpr(seq, as.character(database[names(database) == x$Protein[1]]))[[1]]
-					name <- paste(x$Protein[1], ' (', paste(ind, collapse='/'), '-', paste(ind + attr(ind, 'match.length') - 1, collapse='/'), ')', sep='')
-					if(sum(x$QValue < FDR) != 0){
-						best <- which(x$QValue < FDR)
-						rt <- median(x$rt[best])
-						mz <- median(x$Precursor[best])
-					} else {
-						rt <- median(x$rt)
-						mz <- median(x$Precursor)
-					}
-					mass <- pepMass(seq, mono=TRUE)
-					m.err <- mean(x$'PrecursorError(Da)')
-					prot <- x$Protein[1]
-					fdr <- min(x$QValue)
-					data.frame(name, seq, rt, mz, mass, m.err, prot, fdr)
-				}
-				peplist <- ddply(raw, .(Peptide.ID, Charge), cPep)
-				names(peplist) <- c('Peptide.ID', 'Charge', 'Peptide.name', 'Sequence', 'Retention.time', 'mz', 'Mass', 'Mass.error', 'Protein', 'FDR')
+				peplist <- ddply(raw, .(Peptide.ID, Charge), cPep, database=.Object@database, FDR=.Object@FDR)
+				names(peplist) <- c('Peptide.ID', 'Charge', 'Peptide.name', 'Sequence', 'Retention.time', 'mz', 'Mass', 'Mass.error', 'Protein', 'FDR', 'Sample.coverage')
 				peplist$Peptide.ID <- paste(peplist$Peptide.ID, '_', peplist$Charge, sep='')
 				.Object@peplist <- peplist
 			} else {}
@@ -267,11 +251,14 @@ setMethod(
 )
 
 ### Run MSGFDB through R
-MSGFplus <- function(file, database, tolerance, tda=TRUE, instrument, protease, lengthRange, chargeRange, verbose=FALSE, memory=10000) {
+MSGFplus <- function(file, database, tolerance, isotopeError, tda=TRUE, fragmentation, instrument, protease, termini, modification, lengthRange, chargeRange, matches, verbose=FALSE, memory=10000, saveMZid=FALSE, showDecoy=FALSE) {
 	if(missing(file)){
 		cat('Choose spectrum file...\n')
 		flush.console()
 		file <- file.choose()
+	} else {}
+	if(saveMZid){
+		savename <- paste(sapply(strsplit(file,"\\."), function(x) paste(x[1:(length(x)-1)], collapse=".")), '.mzid', sep='')
 	} else {}
 	if(Sys.info()["sysname"] == 'Windows'){
 		file <- paste('\"', file, '\"', sep='')
@@ -300,24 +287,42 @@ MSGFplus <- function(file, database, tolerance, tda=TRUE, instrument, protease, 
 	tmp <- R.home(component='library/pepmaps/msgfplus.cache.mzid')
 	call <- paste(call, ' -o ', tmp, sep='')
 	
+	if(!missing(isotopeError)){
+		call <- paste(call, ' -ti ', isotopeError[1], ',', isotopeError[2], sep='')
+	} else {}
+	
 	if(tda){
 		call <- paste(call, ' -tda 1', sep='')
 	} else {
 		call <- paste(call, ' -tda 0', sep='')
 	}
 	
+	if(!missing(fragmentation)){
+		if(fragmentation == 'From spectrum'){
+			call <- paste(call, ' -m 0', sep='')
+		} else if(fragmentation == 'CID'){
+			call <- paste(call, ' -m 1', sep='')
+		} else if(fragmentation == 'ETD'){
+			call <- paste(call, ' -m 2', sep='')
+		} else if(fragmentation == 'HCD'){
+			call <- paste(call, ' -m 3', sep='')
+		} else if(fragmentation == 'Merge'){
+			call <- paste(call, ' -m 4', sep='')
+		} else {}
+	} else {}
+	
 	if(!missing(instrument)){
 		if(instrument == 'TOF'){
 			call <- paste(call, ' -inst 2', sep='')
-		} else if(instrument == 'LowLTQ'){
+		} else if(instrument == 'LowLTQ' | instrument == 'Low-res LCQ/LTQ'){
 			call <- paste(call, ' -inst 0', sep='')
-		} else if(instrument == 'HighLTQ'){
+		} else if(instrument == 'HighLTQ' | instrument == 'High-res LTQ'){
 			call <- paste(call, ' -inst 1', sep='')
 		} else {}
 	} else {}
 	
 	if(!missing(protease)){
-		if(protease == 'None'){
+		if(protease == 'Unspecific'){
 			call <- paste(call, ' -e 0', sep='')
 		} else if(protease == 'Trypsin'){
 			call <- paste(call, ' -e 1', sep='')
@@ -335,9 +340,17 @@ MSGFplus <- function(file, database, tolerance, tda=TRUE, instrument, protease, 
 			call <- paste(call, ' -e 7', sep='')
 		} else if(protease == 'alphaLP'){
 			call <- paste(call, ' -e 8', sep='')
-		} else if(protease == 'Unknown'){
+		} else if(protease == 'None'){
 			call <- paste(call, ' -e 9', sep='')
 		} else {}
+	} else {}
+	
+	if(!missing(termini)){
+		call <- paste(call, ' -ntt ', termini, sep='')
+	} else {}
+	
+	if(!missing(modification)){
+		call <- paste(call, ' -mod ', modification, sep='')
 	} else {}
 	
 	if(!missing(lengthRange)){
@@ -354,14 +367,24 @@ MSGFplus <- function(file, database, tolerance, tda=TRUE, instrument, protease, 
 		call <- paste(call, ' -minCharge ', chargeRange[1], ' -maxCharge ', chargeRange[2], sep='')
 	} else {}
 	
+	if(!missing(matches)){
+		call <- paste(call, ' -n ', matches, sep='')
+	} else {}
+	
 	call <- paste('java -Xmx', memory, 'M -jar ', R.home(component='library/pepmaps/java/MSGFplus.jar'), ' ', call, sep='')
 	
 	unlink(paste(tmp, '*', sep=''))
 	
 	system(call, ignore.stderr=TRUE, ignore.stdout=!verbose)
+	if(saveMZid){
+		file.copy(from=tmp, to=savename, overwrite=TRUE)
+	} else {}
 	cat('Importing results...')
 	flush.console()
 	callConv <- paste('java -Xmx', memory, 'M -cp ', R.home(component='library/pepmaps/java/MSGFplus.jar'), ' edu.ucsd.msjava.ui.MzIDToTsv -i ', tmp, ' -o ', paste(tmp, '.tsv', sep=''), ' -unroll 1', sep='')
+	if(showDecoy){
+		callConv <- paste(callConv, ' -showDecoy 1', sep='')
+	} else {}
 	system(callConv)
 	
 	if(length(scan(paste(tmp, '.tsv', sep=''), skip=1, nlines=1, what='character', quiet=T)) == 0){
@@ -370,7 +393,7 @@ MSGFplus <- function(file, database, tolerance, tda=TRUE, instrument, protease, 
 		return(NULL)
 	} else {
 		ans <- read.table(paste(tmp, '.tsv', sep=''), sep='\t', header=TRUE, comment.char='')
-		names(ans) <- scan(paste(tmp, '.tsv', sep=''), nlines=1, what=character(), quiet=TRUE)
+		names(ans) <- sub('#', '', scan(paste(tmp, '.tsv', sep=''), nlines=1, what=character(), quiet=TRUE))
 		cat('DONE\n')
 		flush.console()
 		unlink(paste(tmp, '*', sep=''))
@@ -479,6 +502,7 @@ pepID <- function(type, path=file.choose(), FDR=0.01, sep='\t', dec='.', directo
 				data$Precursor[ind] <- mz
 			}
 			db <- readAAStringSet(database)
+			
 		} else {stop('Only MSGF+, MassAI and Crosswork supported')}
         new(Class='PepID', type=type, raw=data, database=db, FDR=FDR)
     }
